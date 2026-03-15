@@ -1058,7 +1058,9 @@ function onVideoSelectChange() {
     // Auto-select AI-detected category for Gymark videos
     const ctSelect = document.getElementById("contentTypeSelect");
     if (ctSelect && video.category_id) {
-      const opt = [...ctSelect.options].find((o) => o.value === video.category_id && !o.hidden);
+      const opt = [...ctSelect.options].find(
+        (o) => o.value === video.category_id && !o.hidden,
+      );
       if (opt) {
         ctSelect.value = video.category_id;
         // Visual indicator that the category was set by AI
@@ -1268,7 +1270,9 @@ async function loadPostsTable() {
 
     // Store posts for modal access
     window._postsTableCache = {};
-    posts.forEach((p) => { window._postsTableCache[p.id] = p; });
+    posts.forEach((p) => {
+      window._postsTableCache[p.id] = p;
+    });
 
     tbody.innerHTML = posts
       .map((p) => {
@@ -1871,8 +1875,9 @@ function openCalendarPostModal(post) {
 
   modal.classList.add("calendar-post-modal");
 
-  const video = allVideosCache.find((v) => v.id === post.video_id)
-             || videos.find((v) => v.id === post.video_id);
+  const video =
+    allVideosCache.find((v) => v.id === post.video_id) ||
+    videos.find((v) => v.id === post.video_id);
   const videoSrc = video?.filename ? `/static/uploads/${video.filename}` : "";
   const hashtags = Array.isArray(post.hashtags) ? post.hashtags : [];
   const desc = post.description?.trim() || "Sin descripción";
@@ -1921,7 +1926,9 @@ function openCalendarPostModal(post) {
             }
           </div>
         </div>
-        ${canRegenerate ? `
+        ${
+          canRegenerate
+            ? `
         <div class="calendar-detail-block regen-block">
           <div class="calendar-detail-label">✨ Regenerar con IA</div>
           <textarea
@@ -1939,7 +1946,9 @@ function openCalendarPostModal(post) {
             Regenerar con IA
           </button>
         </div>
-        ` : ""}
+        `
+            : ""
+        }
       </div>
     </div>
   `;
@@ -1987,3 +1996,4 @@ async function regeneratePostContent(postId) {
       btn.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline" style="margin-right:4px"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg> Regenerar con IA`;
     }
   }
+}
