@@ -62,11 +62,12 @@ class AIService:
                     1. Nada de títulos genéricos. El título debe tratar EXACTAMENTE de la frase más chistosa, el evento principal o el tema central del clip de audio/video.
                     2. La descripción debe ser CORTA. Nadie lee descripciones largas en TikTok/Reels. Máximo 2 oraciones.
                     3. Analiza el audio detalladamente para entender el contexto real de la situación.
-                    4. NO censures ni reemplaces letras de palabras del clip. Mantén el lenguaje original detectado en el contenido.
+                    4. Mantén el lenguaje coloquial real detectado en el contenido. Si hay groserías fuertes, inclúyelas porque se procesarán automáticamente.
                     5. Los hashtags DEBEN ser específicos del contenido real de ESTE video: palabras clave de la escena, juego/producto, acción, chiste, frase o tema exacto del audio.
                     6. Evita hashtags genéricos repetidos entre videos (ej: #viral, #fyp, #parati) salvo máximo 1 de ese tipo.
                     7. Genera entre 8 y 12 hashtags únicos, en minúsculas y empezando por #.
-                    8. Devuelve EXCLUSIVAMENTE un JSON válido con esta estructura exacta:
+                    8. PUNTUACIÓN ESPAÑOLA OBLIGATORIA: Si la oración es exclamativa, usa '¡' al inicio y '!' al final. Si tiene pregunta, usa '¿' antes de la parte interrogativa y '?' al final. Siempre cierra cada oración con su signo correspondiente. Ej correcto: '¡Malparido! ¿Por qué me la matas?'
+                    9 (original 8). Devuelve EXCLUSIVAMENTE un JSON válido con esta estructura exacta:
                     {{
                       "titulo": "Título Gancho Corto Aquí",
                       "descripcion": "Descripción ultracorta (1 o 2 líneas). Incluye 1 o 2 emojis llamativos. Un pequeño gancho.",
@@ -81,6 +82,76 @@ class AIService:
                     Contexto del creador:
                     {context}
                     """
+
+    # ── Profanity patterns (strong Spanish curse words) ──────────────
+    _PROFANITY_PATTERNS: list[tuple[str, str]] = [
+        # (regex_pattern, replacement_hint) – hint unused, handled by _censor_word
+        # Each pattern uses word boundaries; inner letters replaced by *
+        (r"malparid[ao]s?", None),
+        (r"hijueput[ao]s?", None),
+        (r"gonorre[ao]s?", None),
+        (r"culicagad[ao]s?", None),
+        (r"mamahuev[ao]s?", None),
+        (r"putísim[ao]s?", None),
+        (r"putas?", None),
+        (r"putos?", None),
+        (r"vergas?", None),
+        (r"pendej[ao]s?", None),
+        (r"coñ[ao]s?", None),
+        (r"mierda[s]?", None),
+        (r"carajos?", None),
+        (r"cabr[oó]n", None),
+        (r"cabronas?", None),
+        (r"candelamp?", None),
+        (r"chingad[ao]s?", None),
+        (r"chinga[s]?", None),
+        (r"culos?", None),
+        (r"hdp", None),
+        (r"hp\b", None),
+    ]
+
+    @staticmethod
+    def _censor_word(word: str) -> str:
+        """Keep first + last letter, replace middle with *."""
+        if len(word) <= 2:
+            return word[0] + "*"
+        if len(word) == 3:
+            return word[0] + "*" + word[-1]
+        return word[0] + "*" * (len(word) - 2) + word[-1]
+
+    def _censor_profanity(self, text: str) -> str:
+        """Censor strong profanity: keep first/last letter, replace middle with *."""
+        if not text:
+            return text
+        for pattern, _ in self._PROFANITY_PATTERNS:
+            def _replacer(m: re.Match) -> str:
+                matched = m.group(0)
+                # Preserve original casing of first/last char
+                return self._censor_word(matched)
+            text = re.sub(
+                r"(?<![\w#])" + pattern + r"(?![\w])",
+                _replacer,
+                text,
+                flags=re.IGNORECASE,
+            )
+        return text
+
+    @staticmethod
+    def _fix_spanish_punctuation(text: str) -> str:
+        """Ensure correct Spanish opening/closing punctuation marks."""
+        if not text:
+            return text
+        t = text.strip()
+        # If exclamation is present but no opening ¡, prepend it
+        if "!" in t and not t.startswith("¡"):
+            t = "¡" + t
+        # If interrogation ¿ is present but text doesn't end with ?
+        if "¿" in t and not t.endswith("?"):
+            t = t.rstrip(" .,;:") + "?"
+        # If starts with ¡ but doesn't end with ! or ?
+        if t.startswith("¡") and not re.search(r"[!?]\s*$", t):
+            t = t.rstrip(" .,;:") + "!"
+        return t
 
     def _normalize_result(self, result: dict) -> dict:
         title = str(result.get("titulo", "")).strip()
@@ -107,6 +178,10 @@ class AIService:
         audio_phrase = str(result.get("frase_audio_literal", "")).strip()
         visual_key = str(result.get("visual_clave", "")).strip()
 
+        # Apply profanity censoring (punctuation fix applied later after all transforms)
+        title = self._censor_profanity(title)
+        desc = self._censor_profanity(desc)
+
         return {
             "titulo": title,
             "descripcion": desc,
@@ -125,7 +200,8 @@ class AIService:
             str(text),
             flags=re.IGNORECASE,
         )
-        cleaned = re.sub(r"\s{2,}", " ", cleaned).strip(" .,-:;\"'¡!¿?")
+        # Strip only neutral trailing junk, NOT Spanish punctuation (¡!¿?) which is meaningful
+        cleaned = re.sub(r"\s{2,}", " ", cleaned).strip(" .,-:;\"'")
         return cleaned
 
     def _smart_trim(self, text: str, limit: int) -> str:
@@ -185,7 +261,8 @@ class AIService:
         if len(desc) < 18 and (audio_key or visual_key):
             desc = f"{audio_key}. {visual_key}".strip(" .")
 
-        result["titulo"] = self._smart_trim(title, 90)
+        # Apply Spanish punctuation fix AFTER all text transforms
+        result["titulo"] = self._fix_spanish_punctuation(self._smart_trim(title, 90))
         result["descripcion"] = self._ensure_complete_description(self._smart_trim(desc, 280))
         return result
 
@@ -258,10 +335,13 @@ class AIService:
             return best_category
         return "acc_gimnasio"
     
-    def generate_metadata(self, video_path: str, brand: str, category_id: str) -> dict:
+    def generate_metadata(self, video_path: str, brand: str, category_id: str, extra_context: str = "") -> dict:
         """
         Sube el video a Gemini y genera título, descripción y hashtags basados
         en la marca (gymark/tatuct) y el tipo de contenido/categoría.
+
+        Args:
+            extra_context: Contexto adicional o feedback del usuario para mejorar la generación.
         """
         try:
             logger.info(f"Subiendo video a Gemini IA: {video_path}")
@@ -316,6 +396,8 @@ class AIService:
                             )
                             if category_id:
                                 context += f"\nCategoría de este video: {category_id}."
+                            if extra_context:
+                                context += f"\n{extra_context}"
 
                             should_detect_category = (brand == "gymark" and not self._coerce_gymark_category(category_id))
                             prompt = self._build_prompt(

@@ -370,11 +370,11 @@ BEST_TIMES = {
 HASHTAGS = {
     # ── Gaming / Twitch ──────────────────────────────────────────
     "gaming": [
-        "#gaming", "#videojuegos", "#gamer", "#twitch", "#stream",
-        "#clips", "#funny", "#gameplay", "#fyp", "#parati",
-        "#colombia", "#twitchclips", "#streaminglatino", "#gaminglatino",
-        "#videojuegosespanol", "#highlights", "#gaming2025",
-        "#tatuct", "#twitchcolombia", "#clipsgaming",
+        "#twitch", "#twitchcolombia", "#tatuct", "#gaming", "#fyp",
+        "#parati", "#streaminglatino", "#gaminglatino",
+        "#videojuegos", "#gamer", "#stream", "#twitchclips",
+        "#gameplay", "#colombia", "#clips", "#funny",
+        "#videojuegosespanol", "#highlights", "#gaming2025", "#clipsgaming",
     ],
     # ── Accesorios de Gimnasio ────────────────────────────────────
     "acc_gimnasio": [

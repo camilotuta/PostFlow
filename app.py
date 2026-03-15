@@ -653,6 +653,54 @@ def create_app() -> Flask:
         db.session.commit()
         return jsonify({"message": "Post cancelado"})
 
+    @app.route("/api/posts/<int:post_id>/regenerate", methods=["POST"])
+    def regenerate_post(post_id):
+        """Regenera el título, descripción y hashtags de un post usando IA.
+        Acepta feedback opcional del usuario para mejorar el resultado."""
+        auth_brand = _auth_brand()
+        post = Post.query.filter(Post.id == post_id, Post.brand == auth_brand).first_or_404()
+
+        data = request.get_json(force=True) or {}
+        feedback = str(data.get("feedback", "")).strip()
+
+        video = Video.query.filter(Video.id == post.video_id).first()
+        if not video:
+            return jsonify({"error": "Video del post no encontrado"}), 404
+
+        real_path = os.path.abspath(video.file_path)
+        if not os.path.exists(real_path):
+            return jsonify({"error": "Archivo de video físico no encontrado"}), 404
+
+        try:
+            from services.ai_service import AIService
+            ai_svc = AIService()
+
+            category_id = post.content_type or video.category_id or ""
+            extra_ctx = f"Feedback del usuario para mejorar: {feedback}" if feedback else ""
+
+            result = ai_svc.generate_metadata(real_path, post.brand, category_id, extra_context=extra_ctx)
+
+            post.title = result.get("titulo", post.title)
+            post.description = result.get("descripcion", post.description)
+
+            new_hashtags_raw = result.get("hashtags", [])
+            platform_hashtags = hashtag_svc.get_hashtags(
+                post.content_type, post.platform, new_hashtags_raw, brand=post.brand
+            )
+            post.hashtags = json.dumps(platform_hashtags)
+
+            db.session.commit()
+            logger.info(f"Post {post_id} regenerado con IA (feedback: {bool(feedback)})")
+            return jsonify(post.to_dict())
+
+        except Exception as e:
+            logger.error(f"Error regenerando post {post_id}: {e}")
+            err = str(e)
+            low = err.lower()
+            if "429" in low or "quota" in low or "resourceexhausted" in low:
+                return jsonify({"error": err}), 429
+            return jsonify({"error": err}), 500
+
     @app.route("/api/posts/<int:post_id>/publish-now", methods=["POST"])
     def publish_now(post_id):
         """Fuerza la publicación inmediata de un post programado."""

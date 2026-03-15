@@ -1640,6 +1640,30 @@ a:hover { text-decoration: underline; }
   font-size: 11px;
 }
 
+/* Regenerar con IA – bloque en modal */
+.regen-block {
+  border-top: 1px solid rgba(108,99,255,.25);
+  padding-top: 14px;
+  margin-top: 6px;
+}
+.regen-feedback {
+  width: 100%;
+  resize: vertical;
+  min-height: 56px;
+  font-size: 13px;
+  margin-top: 6px;
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid rgba(108,99,255,.35);
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+.regen-feedback:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
 .event-time { color: var(--text3); font-size: 10px; }
 .event-title { 
   white-space: nowrap; 

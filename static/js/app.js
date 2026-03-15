@@ -786,6 +786,9 @@ async function loadScheduleTab() {
     const ctSelect = document.getElementById("contentTypeSelect");
     if (ctSelect) {
       ctSelect.addEventListener("change", () => {
+        // Reset AI indicator when user manually changes category
+        ctSelect.style.borderColor = "";
+        ctSelect.title = "";
         loadSchedulePreview();
         renderBestTimesReference();
       });
@@ -1052,7 +1055,20 @@ function onVideoSelectChange() {
         `${video.original_name} · ${video.file_size_mb} MB` +
         (video.duration ? ` · ${video.duration}s` : "");
 
+    // Auto-select AI-detected category for Gymark videos
+    const ctSelect = document.getElementById("contentTypeSelect");
+    if (ctSelect && video.category_id) {
+      const opt = [...ctSelect.options].find((o) => o.value === video.category_id && !o.hidden);
+      if (opt) {
+        ctSelect.value = video.category_id;
+        // Visual indicator that the category was set by AI
+        ctSelect.title = `Categoría detectada por IA: ${video.category_id}`;
+        ctSelect.style.borderColor = "#6c63ff";
+      }
+    }
+
     loadSchedulePreview();
+    renderBestTimesReference();
   }
 }
 
@@ -1250,6 +1266,10 @@ async function loadPostsTable() {
       return;
     }
 
+    // Store posts for modal access
+    window._postsTableCache = {};
+    posts.forEach((p) => { window._postsTableCache[p.id] = p; });
+
     tbody.innerHTML = posts
       .map((p) => {
         const vidName =
@@ -1264,6 +1284,7 @@ async function loadPostsTable() {
           <td data-label="Programado">${p.scheduled_at}</td>
           <td data-label="Estado"><span class="badge badge-${p.status}">${statusLabel(p.status)}</span></td>
           <td data-label="Acciones" style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-sm btn-ghost" onclick="openPostDetailFromTable(${p.id})">👁 Ver</button>
             ${p.status === "scheduled" ? `<button class="btn btn-sm btn-ghost" onclick="publishNow(${p.id})">▶ Ahora</button>` : ""}
             ${["scheduled", "failed"].includes(p.status) ? `<button class="btn btn-sm btn-red" onclick="cancelPost(${p.id})">✕</button>` : ""}
           </td>
@@ -1273,6 +1294,12 @@ async function loadPostsTable() {
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="7" class="empty-msg">Error cargando posts</td></tr>`;
   }
+}
+
+function openPostDetailFromTable(postId) {
+  const p = window._postsTableCache?.[postId];
+  if (!p) return;
+  openCalendarPostModal(p);
 }
 
 async function publishNow(id) {
@@ -1844,7 +1871,8 @@ function openCalendarPostModal(post) {
 
   modal.classList.add("calendar-post-modal");
 
-  const video = allVideosCache.find((v) => v.id === post.video_id);
+  const video = allVideosCache.find((v) => v.id === post.video_id)
+             || videos.find((v) => v.id === post.video_id);
   const videoSrc = video?.filename ? `/static/uploads/${video.filename}` : "";
   const hashtags = Array.isArray(post.hashtags) ? post.hashtags : [];
   const desc = post.description?.trim() || "Sin descripción";
@@ -1852,9 +1880,11 @@ function openCalendarPostModal(post) {
     .replace(/<[^>]*>/g, "")
     .trim();
 
+  const canRegenerate = ["scheduled", "failed"].includes(post.status);
+
   content.innerHTML = `
     <div class="calendar-post-head">
-      <div class="calendar-post-title">${post.title || "Post sin título"}</div>
+      <div class="calendar-post-title" id="cpm-title-${post.id}">${post.title || "Post sin título"}</div>
       <div class="calendar-post-meta">
         <span class="calendar-chip"><span class="plat-dot ${post.platform}"></span>${platformLabel(post.platform)}</span>
         <span class="calendar-chip">${statusLabel(post.status)}</span>
@@ -1877,11 +1907,11 @@ function openCalendarPostModal(post) {
         </div>
         <div class="calendar-detail-block">
           <div class="calendar-detail-label">Descripción</div>
-          <div class="calendar-detail-text">${desc}</div>
+          <div class="calendar-detail-text" id="cpm-desc-${post.id}">${desc}</div>
         </div>
         <div class="calendar-detail-block">
           <div class="calendar-detail-label">Hashtags</div>
-          <div class="calendar-hashtags">
+          <div class="calendar-hashtags" id="cpm-hashtags-${post.id}">
             ${
               hashtags.length
                 ? hashtags
@@ -1891,9 +1921,69 @@ function openCalendarPostModal(post) {
             }
           </div>
         </div>
+        ${canRegenerate ? `
+        <div class="calendar-detail-block regen-block">
+          <div class="calendar-detail-label">✨ Regenerar con IA</div>
+          <textarea
+            id="regenFeedback-${post.id}"
+            class="form-input regen-feedback"
+            rows="2"
+            placeholder="Opcional: indica qué mejorar (ej: más llamativo, enfocarse en el producto, tono motivacional...)"
+          ></textarea>
+          <button
+            class="btn btn-primary btn-sm mt-8"
+            id="regenBtn-${post.id}"
+            onclick="regeneratePostContent(${post.id})"
+          >
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline" style="margin-right:4px"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+            Regenerar con IA
+          </button>
+        </div>
+        ` : ""}
       </div>
     </div>
   `;
 
   overlay.classList.remove("hidden");
 }
+
+async function regeneratePostContent(postId) {
+  const btn = document.getElementById(`regenBtn-${postId}`);
+  const feedbackEl = document.getElementById(`regenFeedback-${postId}`);
+  const feedback = feedbackEl ? feedbackEl.value.trim() : "";
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline" style="margin-right:4px;animation:spin 1s linear infinite"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg> Analizando video...`;
+  }
+
+  try {
+    const updated = await post(`/api/posts/${postId}/regenerate`, { feedback });
+
+    // Update modal fields in-place
+    const titleEl = document.getElementById(`cpm-title-${postId}`);
+    const descEl = document.getElementById(`cpm-desc-${postId}`);
+    const hashtagsEl = document.getElementById(`cpm-hashtags-${postId}`);
+
+    if (titleEl) titleEl.textContent = updated.title || "";
+    if (descEl) descEl.textContent = updated.description || "";
+    if (hashtagsEl) {
+      const tags = Array.isArray(updated.hashtags) ? updated.hashtags : [];
+      hashtagsEl.innerHTML = tags.length
+        ? tags.map((h) => `<span class="calendar-hashtag">${h}</span>`).join("")
+        : `<span class="calendar-detail-text">Sin hashtags</span>`;
+    }
+
+    toast("✨ Contenido regenerado con éxito", "success");
+
+    // Refresh cached lists
+    if (typeof loadPostsTable === "function") loadPostsTable();
+    if (typeof loadDashboard === "function") loadDashboard();
+  } catch (e) {
+    toast(`Error al regenerar: ${e.error || "intenta de nuevo"}`, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline" style="margin-right:4px"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg> Regenerar con IA`;
+    }
+  }
