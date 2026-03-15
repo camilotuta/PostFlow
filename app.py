@@ -220,6 +220,13 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
         if brand not in config.BRANDS:
             brand = "gymark"
 
+        if not category_id and brand == "tatuct":
+            category_id = "gaming"
+        brand_categories = config.BRAND_CATEGORIES.get(brand, [])
+        allowed_categories = set(brand_categories)
+        if category_id and category_id not in allowed_categories:
+            category_id = brand_categories[0] if brand_categories else ""
+
         video = Video(
             filename      = unique_name,
             original_name = secure_filename(file.filename),
@@ -262,7 +269,17 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
             return jsonify({"error": "Video no encontrado"}), 404
         
         brand = data.get("brand", video.brand)
-        category_id = data.get("category_id", "")
+        if brand not in config.BRANDS:
+            return jsonify({"error": f"Marca inválida: {brand}"}), 400
+
+        category_id = str(data.get("category_id", "") or "").strip()
+        brand_categories = config.BRAND_CATEGORIES.get(brand, [])
+        allowed_categories = set(brand_categories)
+
+        if not category_id and brand == "tatuct":
+            category_id = "gaming"
+        if category_id and category_id not in allowed_categories:
+            return jsonify({"error": f"Categoría '{category_id}' no permitida para la marca {brand}"}), 400
 
         try:
             from services.ai_service import AIService
@@ -278,9 +295,17 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
             video.ai_title = result.get("titulo", "")
             video.ai_description = result.get("descripcion", "")
             video.ai_hashtags = json.dumps(result.get("hashtags", []))
-            if category_id: video.category_id = category_id
+            resolved_category = str(result.get("category_id") or category_id or "").strip()
+            if resolved_category and resolved_category not in allowed_categories:
+                resolved_category = brand_categories[0] if brand_categories else ""
+
+            video.brand = brand
+            video.category_id = resolved_category or None
             db.session.commit()
-            return jsonify(result)
+            payload = dict(result)
+            payload["brand"] = video.brand
+            payload["category_id"] = video.category_id
+            return jsonify(payload)
             
         except Exception as e:
             logger.error(f"Error AI: {e}")
@@ -545,15 +570,30 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
         from config import BRANDS
         status = {"timezone": config.TIMEZONE, "brands": {}}
         for brand_key in BRANDS:
+            brand_cfg = BRANDS[brand_key]
+            tiktok_ok = bool(
+                brand_cfg.get("tiktok_client_key")
+                and brand_cfg.get("tiktok_client_secret")
+                and brand_cfg.get("tiktok_access_token")
+                and brand_cfg.get("tiktok_open_id")
+            )
+            instagram_ok = bool(
+                brand_cfg.get("instagram_account_id")
+                and brand_cfg.get("facebook_access_token")
+            )
+            facebook_ok = bool(
+                brand_cfg.get("facebook_page_id")
+                and brand_cfg.get("facebook_access_token")
+            )
             status["brands"][brand_key] = {
-                "tiktok":    TikTokService(brand_key).is_configured(),
-                "instagram": InstagramService(brand_key).is_configured(),
-                "facebook":  FacebookService(brand_key).is_configured(),
+                "tiktok":    tiktok_ok,
+                "instagram": instagram_ok,
+                "facebook":  facebook_ok,
             }
         # flatten para compatibilidad legado
-        status["tiktok"]    = TikTokService("gymark").is_configured()
-        status["instagram"] = InstagramService("gymark").is_configured()
-        status["facebook"]  = FacebookService("gymark").is_configured()
+        status["tiktok"] = status["brands"].get("gymark", {}).get("tiktok", False)
+        status["instagram"] = status["brands"].get("gymark", {}).get("instagram", False)
+        status["facebook"] = status["brands"].get("gymark", {}).get("facebook", False)
         return jsonify(status)
 
     # ── Archivos estáticos (thumbnails + uploads) ─────────────

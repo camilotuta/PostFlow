@@ -228,13 +228,20 @@ async function updateUploadCategories(bKey) {
 
   const brand = brandsData.find((b) => b.key === bKey);
   if (brand && brand.categories && brand.categories.length) {
-    select.innerHTML = brand.categories
+    const options = brand.categories
       .map((c) => {
         const found = window.contentTypesData.find((ct) => ct.key === c);
         const label = found ? found.label : c;
         return `<option value="${c}">${label}</option>`;
       })
       .join("");
+
+    if (bKey === "gymark") {
+      select.innerHTML = `<option value="">Auto (detectar con IA)</option>${options}`;
+      select.value = "";
+    } else {
+      select.innerHTML = options;
+    }
   } else {
     select.innerHTML = "<option value=''>General</option>";
   }
@@ -601,6 +608,10 @@ async function generateAIWithRetry(payload, onWait) {
 async function loadVideoGallery() {
   const gallery = document.getElementById("videoGallery");
   try {
+    if (!brandsData.length) {
+      brandsData = await get("/api/brands");
+    }
+
     videos = await get("/api/videos");
     if (!videos.length) {
       gallery.innerHTML = `<div class="empty-msg">No has subido videos aún</div>`;
@@ -610,6 +621,12 @@ async function loadVideoGallery() {
     gallery.innerHTML = videos
       .map((v) => {
         const bm = getBrandMeta(v.brand);
+        const brandOptions = brandsData
+          .map(
+            (b) =>
+              `<option value="${b.key}" ${b.key === v.brand ? "selected" : ""}>${b.label}</option>`,
+          )
+          .join("");
         return `
       <div class="video-card" data-id="${v.id}">
         <div class="video-card__thumb">
@@ -626,6 +643,12 @@ async function loadVideoGallery() {
             <span class="vbrand-badge" style="background:${bm.color}">${bm.label}</span>
             <span class="video-card__meta">${v.uploaded_at}</span>
           </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+            <select class="form-input video-card__brand-select" data-id="${v.id}" style="max-width:190px;height:34px;padding:6px 10px;">
+              ${brandOptions}
+            </select>
+            <button class="btn btn-sm btn-ghost video-card__account-apply" data-id="${v.id}">Cambiar cuenta + IA</button>
+          </div>
         </div>
         <button class="video-card__del btn btn-sm btn-red" data-id="${v.id}">✕</button>
       </div>`;
@@ -636,6 +659,13 @@ async function loadVideoGallery() {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         deleteVideo(btn.dataset.id);
+      });
+    });
+
+    gallery.querySelectorAll(".video-card__account-apply").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        changeVideoAccountAndRegenerateAI(btn.dataset.id);
       });
     });
   } catch (e) {
@@ -657,6 +687,63 @@ async function deleteVideo(id) {
     populateVideoSelect();
   } catch (e) {
     toast("Error al eliminar", "error");
+  }
+}
+
+async function changeVideoAccountAndRegenerateAI(videoId) {
+  const selector = document.querySelector(
+    `.video-card__brand-select[data-id="${videoId}"]`,
+  );
+  const newBrand = selector?.value;
+  const video = videos.find((v) => String(v.id) === String(videoId));
+
+  if (!newBrand || !video) {
+    toast("No se pudo identificar la cuenta para actualizar", "error");
+    return;
+  }
+
+  if (newBrand === video.brand) {
+    toast("Ese video ya está en esa cuenta", "info");
+    return;
+  }
+
+  if (
+    !confirm("¿Cambiar la cuenta de este video y regenerar metadata con IA?")
+  ) {
+    return;
+  }
+
+  const btn = document.querySelector(
+    `.video-card__account-apply[data-id="${videoId}"]`,
+  );
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Regenerando...";
+  }
+
+  try {
+    const categoryForAI = newBrand === "gymark" ? "" : "gaming";
+    await generateAIWithRetry({
+      video_id: Number(videoId),
+      brand: newBrand,
+      category_id: categoryForAI,
+    });
+
+    toast("Cuenta actualizada y metadata IA regenerada", "success");
+    await loadVideoGallery();
+    await populateVideoSelect();
+    loadDashboard();
+  } catch (e) {
+    toast(
+      `No se pudo actualizar la cuenta: ${e?.error || "error desconocido"}`,
+      "error",
+    );
+    if (selector) selector.value = video.brand;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Cambiar cuenta + IA";
+    }
   }
 }
 

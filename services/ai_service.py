@@ -9,6 +9,14 @@ logger = logging.getLogger(__name__)
 
 class AIService:
     def __init__(self):
+        self.gymark_categories = [
+            "acc_gimnasio",
+            "pilates_yoga",
+            "sup_naturales",
+            "ropa_deportiva",
+            "sup_deportivos",
+            "home_gym",
+        ]
         self.model_names = [
             "models/gemini-2.5-pro",
             "models/gemini-2.5-flash",
@@ -19,7 +27,7 @@ class AIService:
             "response_mime_type": "application/json"
         }
 
-    def _build_prompt(self, context: str, strict_audio: bool = True) -> str:
+    def _build_prompt(self, context: str, strict_audio: bool = True, category_detection: bool = False) -> str:
         extra_audio_rules = ""
         if strict_audio:
             extra_audio_rules = """
@@ -31,6 +39,21 @@ class AIService:
                     14. SOLO usa texto en pantalla si coincide con lo que se oye o con la acción visual principal.
                     15. PROHIBIDO mencionar "IA", "AI", "inteligencia artificial", "chatgpt", "gemini" o similares en titulo/descripcion.
             """
+
+        category_rules = ""
+        category_field = ""
+        if category_detection:
+            category_rules = """
+                    16. Debes clasificar el video en EXACTAMENTE una categoría de Gymark usando SOLO estas opciones:
+                        - acc_gimnasio
+                        - pilates_yoga
+                        - sup_naturales
+                        - ropa_deportiva
+                        - sup_deportivos
+                        - home_gym
+                    17. Si dudas entre dos, elige la más específica según el producto/acción dominante del clip.
+            """
+            category_field = ',\n                      "category_id": "una de las 6 categorías de gymark"'
 
         return f"""
                     Analiza este video COMPLETO (imágenes + AUDIO: voz, diálogos, música, efectos de sonido, risas, tono, jingles, etc.).
@@ -50,9 +73,10 @@ class AIService:
                       "hashtags": ["#nicho1", "#viral2"],
                       "audio_clave": "resumen de lo escuchado en el audio",
                                             "frase_audio_literal": "frase exacta detectada en audio o sin_voz_clara",
-                                            "visual_clave": "acción visual principal del clip"
+                                                                                        "visual_clave": "acción visual principal del clip"{category_field}
                     }}
                     {extra_audio_rules}
+                                        {category_rules}
 
                     Contexto del creador:
                     {context}
@@ -196,6 +220,43 @@ class AIService:
             return len(desc) < 8
 
         return False
+
+    def _coerce_gymark_category(self, value: str) -> str:
+        txt = str(value or "").strip().lower()
+        return txt if txt in self.gymark_categories else ""
+
+    def _infer_gymark_category_from_text(self, result: dict) -> str:
+        ai_category = self._coerce_gymark_category(result.get("category_id", ""))
+        if ai_category:
+            return ai_category
+
+        text = " ".join([
+            str(result.get("titulo", "")),
+            str(result.get("descripcion", "")),
+            str(result.get("audio_clave", "")),
+            str(result.get("visual_clave", "")),
+            " ".join([str(t) for t in (result.get("hashtags", []) or [])]),
+        ]).lower()
+
+        keyword_map = {
+            "pilates_yoga": ["pilates", "yoga", "mat", "colchoneta", "namaste", "stretch", "movilidad"],
+            "ropa_deportiva": ["legging", "licra", "short", "camiseta", "sudadera", "outfit", "ropa"],
+            "sup_naturales": ["natural", "herbal", "organico", "orgánico", "vitamina", "detox", "inmunidad"],
+            "sup_deportivos": ["proteina", "proteína", "creatina", "preworkout", "amino", "whey", "suplement"],
+            "home_gym": ["home gym", "casa", "entrenar en casa", "mancuerna", "rack", "banca", "setup"],
+            "acc_gimnasio": ["accesorio", "gimnasio", "guantes", "rodillera", "strap", "banda", "cinturon", "cinturón"],
+        }
+
+        scores = {key: 0 for key in self.gymark_categories}
+        for category, keywords in keyword_map.items():
+            for kw in keywords:
+                if kw in text:
+                    scores[category] += 1
+
+        best_category = max(scores, key=scores.get)
+        if scores[best_category] > 0:
+            return best_category
+        return "acc_gimnasio"
     
     def generate_metadata(self, video_path: str, brand: str, category_id: str) -> dict:
         """
@@ -245,12 +306,25 @@ class AIService:
                             if category_id:
                                 context += f"\nCategoría de este video: {category_id}."
 
-                            prompt = self._build_prompt(context, strict_audio=True)
+                            should_detect_category = (brand == "gymark" and not self._coerce_gymark_category(category_id))
+                            prompt = self._build_prompt(
+                                context,
+                                strict_audio=True,
+                                category_detection=should_detect_category,
+                            )
 
                             logger.info(f"Generando contenido con {model_name} (key {key_index})...")
                             response = model.generate_content([video_file, prompt])
-                            parsed_result = self._normalize_result(json.loads(response.text))
+                            raw_result = json.loads(response.text)
+                            parsed_result = self._normalize_result(raw_result)
                             parsed_result = self._enforce_audio_alignment(parsed_result)
+
+                            if brand == "gymark":
+                                parsed_result["category_id"] = (
+                                    self._coerce_gymark_category(category_id)
+                                    or self._infer_gymark_category_from_text(raw_result)
+                                    or "acc_gimnasio"
+                                )
 
                             if self._looks_generic_or_audio_missing(parsed_result):
                                 last_error = ValueError("Respuesta genérica o sin señal de audio")

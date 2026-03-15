@@ -188,10 +188,6 @@ class SchedulerService:
 
     def _publish_post(self, post: Post):
         """Publica un post individual y actualiza su estado."""
-        from services.tiktok_service    import TikTokService
-        from services.instagram_service import InstagramService
-        from services.facebook_service  import FacebookService
-
         video     = post.video
         video_path = video.file_path
         hashtags   = post.hashtags_list()
@@ -201,22 +197,7 @@ class SchedulerService:
             post.status = "posting"
             db.session.commit()
 
-            if post.platform == "tiktok":
-                result = TikTokService(brand).post_video(video_path, post.title, hashtags)
-
-            elif post.platform == "instagram":
-                # Para IG necesitamos una URL pública – si está en demo, funciona igual
-                public_url = os.environ.get("PUBLIC_BASE_URL", "http://localhost:5000")
-                video_url  = f"{public_url}/static/uploads/{video.filename}"
-                caption    = f"{post.title}\n\n{post.description or ''}"
-                result     = InstagramService(brand).post_video(video_url, caption, hashtags)
-
-            elif post.platform == "facebook":
-                description = f"{post.title}\n\n{post.description or ''}"
-                result = FacebookService(brand).post_video(video_path, post.title, description, hashtags)
-
-            else:
-                result = {"success": False, "error": f"Plataforma desconocida: {post.platform}"}
+            result = self._simulate_publish(post=post, video_path=video_path, hashtags=hashtags)
 
             if result.get("success"):
                 post.status           = "published"
@@ -234,3 +215,22 @@ class SchedulerService:
             logger.exception(f"[Scheduler] Excepción publicando post {post.id}")
         finally:
             db.session.commit()
+
+    def _simulate_publish(self, post: Post, video_path: str, hashtags: list[str]) -> dict:
+        if post.platform not in {"tiktok", "instagram", "facebook"}:
+            return {"success": False, "error": f"Plataforma desconocida: {post.platform}"}
+
+        publish_id = f"demo-{post.platform}-{post.id}"
+        logger.info(
+            "[Scheduler] Publicación simulada (%s) para post=%s, video=%s, hashtags=%s",
+            post.platform,
+            post.id,
+            os.path.basename(video_path),
+            len(hashtags),
+        )
+        return {
+            "success": True,
+            "demo": True,
+            "platform": post.platform,
+            "publish_id": publish_id,
+        }
