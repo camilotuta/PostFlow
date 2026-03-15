@@ -436,3 +436,15 @@ BRAND_CATEGORIES = {
                "ropa_deportiva", "sup_deportivos", "home_gym"],
     "tatuct": ["gaming"],
 }
+
+# Login por cuenta/marca
+BRAND_LOGIN_PASSWORDS = {
+    "gymark":  "gymark",
+    "tatuct": "123",
+}
+
+# Tokens para feed ICS público por marca (usar valores secretos en producción)
+BRAND_CALENDAR_TOKENS = {
+    "gymark": os.environ.get("GYMARK_CALENDAR_TOKEN", "gymark-calendar-token"),
+    "tatuct": os.environ.get("TATUCT_CALENDAR_TOKEN", "tatuct-calendar-token"),
+}

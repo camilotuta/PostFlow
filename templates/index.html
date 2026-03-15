@@ -144,6 +144,9 @@
           <span class="topbar__time" id="currentTime"></span>
         </div>
         <div class="topbar__right">
+          <div class="tz-badge" title="Cuenta activa">
+            {{ auth_label or auth_brand or 'Cuenta' }}
+          </div>
           <div class="tz-badge">
             <svg
               width="16"
@@ -160,6 +163,9 @@
             </svg>
             Colombia
           </div>
+          <form method="POST" action="/logout" style="margin: 0">
+            <button type="submit" class="btn btn-ghost btn-sm">Salir</button>
+          </form>
         </div>
       </header>
 
@@ -820,11 +826,13 @@
                 <button class="view-chip" data-view="day">Día (D)</button>
               </div>
               <div class="cal-filters">
-                <button class="filter-chip active" data-filter="all">
-                  Todos
+                <button
+                  class="filter-chip active"
+                  data-filter="all"
+                  id="calendarAccountFilter"
+                >
+                  Esta cuenta
                 </button>
-                <button class="filter-chip" data-filter="gymark">GYMARK</button>
-                <button class="filter-chip" data-filter="tatuct">TatuCT</button>
               </div>
             </div>
 

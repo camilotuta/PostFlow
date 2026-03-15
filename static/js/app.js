@@ -258,6 +258,11 @@ async function initUploadBrandSelector() {
       return;
     }
   }
+
+  if (!brandsData.find((b) => b.key === uploadBrand) && brandsData.length) {
+    uploadBrand = brandsData[0].key;
+  }
+
   // Render once (check if already rendered)
   updateUploadCategories(uploadBrand);
   if (container.childElementCount !== brandsData.length) {
@@ -621,6 +626,7 @@ async function loadVideoGallery() {
     gallery.innerHTML = videos
       .map((v) => {
         const bm = getBrandMeta(v.brand);
+        const canSwitchAccount = brandsData.length > 1;
         const brandOptions = brandsData
           .map(
             (b) =>
@@ -644,10 +650,10 @@ async function loadVideoGallery() {
             <span class="video-card__meta">${v.uploaded_at}</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-            <select class="form-input video-card__brand-select" data-id="${v.id}" style="max-width:190px;height:34px;padding:6px 10px;">
+            <select class="form-input video-card__brand-select" data-id="${v.id}" style="max-width:190px;height:34px;padding:6px 10px;" ${canSwitchAccount ? "" : "disabled"}>
               ${brandOptions}
             </select>
-            <button class="btn btn-sm btn-ghost video-card__account-apply" data-id="${v.id}">Cambiar cuenta + IA</button>
+            ${canSwitchAccount ? `<button class="btn btn-sm btn-ghost video-card__account-apply" data-id="${v.id}">Cambiar cuenta + IA</button>` : ""}
           </div>
         </div>
         <button class="video-card__del btn btn-sm btn-red" data-id="${v.id}">✕</button>
@@ -821,6 +827,15 @@ async function loadBrands() {
   if (!container) return;
   try {
     brandsData = await get("/api/brands");
+    if (!brandsData.length) {
+      container.innerHTML = `<div class="empty-msg">No hay cuentas disponibles</div>`;
+      return;
+    }
+
+    if (!brandsData.find((b) => b.key === currentBrand)) {
+      currentBrand = brandsData[0].key;
+    }
+
     container.innerHTML = brandsData
       .map(
         (b) => `
@@ -1407,6 +1422,7 @@ let calendarPosts = [];
 let allVideosCache = [];
 let calendarFilter = "all";
 let calendarView = "month"; // "month", "week", "day"
+let calendarFeedInfoCache = null;
 
 function initCalendar() {
   document
@@ -1517,26 +1533,30 @@ function formatDateKey(date) {
 }
 
 function copyCalendarFeed() {
-  const feedUrl = `${window.location.origin}/calendar.ics`;
-  navigator.clipboard
-    ?.writeText(feedUrl)
-    .then(() => {
-      toast(
-        "Link ICS copiado. Agrégalo en Google Calendar > Desde URL",
-        "success",
-      );
-      window.open(
-        "https://calendar.google.com/calendar/u/0/r/settings/addbyurl",
-        "_blank",
-      );
-    })
-    .catch(() => {
-      toast(`Feed ICS: ${feedUrl}`, "info");
-    });
+  const run = async () => {
+    if (!calendarFeedInfoCache) {
+      calendarFeedInfoCache = await get("/api/calendar/feed-info");
+    }
+
+    const feedUrl = calendarFeedInfoCache.feed_url;
+    const googleUrl =
+      calendarFeedInfoCache.google_subscribe_url ||
+      "https://calendar.google.com/calendar/u/0/r/settings/addbyurl";
+
+    await navigator.clipboard?.writeText(feedUrl);
+    toast("Link ICS de esta cuenta copiado", "success");
+    window.open(googleUrl, "_blank");
+  };
+
+  run().catch(() => {
+    toast("No se pudo copiar el feed de calendario", "error");
+  });
 }
 
 async function loadCalendarTab() {
   try {
+    calendarFeedInfoCache = await get("/api/calendar/feed-info");
+
     const [resP, resV] = await Promise.all([
       fetch("/api/posts"),
       fetch("/api/videos"),
@@ -1547,6 +1567,12 @@ async function loadCalendarTab() {
 
     calendarPosts = posts;
     allVideosCache = videos;
+    calendarFilter = "all";
+
+    const filterBtn = document.getElementById("calendarAccountFilter");
+    if (filterBtn && calendarFeedInfoCache?.brand) {
+      filterBtn.textContent = `Cuenta: ${String(calendarFeedInfoCache.brand).toUpperCase()}`;
+    }
 
     if (isMobileViewport() && calendarView === "month") {
       setCalendarView(isSmallMobileViewport() ? "day" : "week");
@@ -1731,7 +1757,6 @@ function renderCalendarGrid() {
     });
 
     dayPosts.forEach((p) => {
-      if (calendarFilter !== "all" && p.brand !== calendarFilter) return;
       let statusClass = "status-scheduled";
       if (p.status === "published") statusClass = "status-published";
       if (p.status === "failed") statusClass = "status-failed";

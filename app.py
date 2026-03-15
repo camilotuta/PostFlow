@@ -74,13 +74,143 @@ def create_app() -> Flask:
     scheduler_svc = SchedulerService()
     scheduler_svc.start(app)
 
+    def _auth_brand() -> str | None:
+        brand = session.get("auth_brand")
+        if brand in config.BRANDS:
+            return brand
+        return None
+
+    @app.before_request
+    def require_authentication():
+        if request.method == "OPTIONS":
+            return None
+
+        public_endpoints = {
+            "favicon",
+            "terms",
+            "privacy",
+            "login",
+            "tiktok_verification",
+            "serve_thumb",
+            "public_calendar_feed",
+        }
+
+        if request.endpoint in public_endpoints or request.path.startswith("/static/"):
+            return None
+
+        if _auth_brand():
+            return None
+
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "No autenticado"}), 401
+
+        return redirect("/login")
+
+    def _calendar_posts_for_brand(brand: str):
+        return (
+            Post.query.filter(Post.brand == brand, Post.status.in_(["scheduled", "posting", "published"]))
+            .order_by(Post.scheduled_at.asc())
+            .all()
+        )
+
+    def _calendar_ics_response(brand: str, posts: list[Post], public_feed: bool = False):
+        brand_cfg = config.BRANDS.get(brand, {})
+        calendar_label = str(brand_cfg.get("label") or brand).strip()
+
+        def esc(value: str) -> str:
+            return (
+                (value or "")
+                .replace("\\", "\\\\")
+                .replace(";", "\\;")
+                .replace(",", "\\,")
+                .replace("\n", "\\n")
+            )
+
+        feed_type = "Public" if public_feed else "Privado"
+        lines = [
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            f"PRODID:-//PostFlow//{calendar_label}//ES",
+            "CALSCALE:GREGORIAN",
+            "METHOD:PUBLISH",
+            f"X-WR-CALNAME:{esc(calendar_label)} - Calendario PostFlow ({feed_type})",
+            "X-WR-TIMEZONE:America/Bogota",
+        ]
+
+        now_utc = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        for post in posts:
+            local_dt = post.scheduled_at.replace(tzinfo=COL_TZ)
+            start_utc = local_dt.astimezone(ZoneInfo("UTC"))
+            end_utc = start_utc + timedelta(minutes=30)
+
+            summary = f"{post.title} [{post.platform.upper()}]"
+            description = f"Marca: {post.brand}\\nEstado: {post.status}"
+            if post.description:
+                description += f"\\n{post.description}"
+
+            lines.extend(
+                [
+                    "BEGIN:VEVENT",
+                    f"UID:post-{post.id}-{brand}@postflow.local",
+                    f"DTSTAMP:{now_utc}",
+                    f"DTSTART:{start_utc.strftime('%Y%m%dT%H%M%SZ')}",
+                    f"DTEND:{end_utc.strftime('%Y%m%dT%H%M%SZ')}",
+                    f"SUMMARY:{esc(summary)}",
+                    f"DESCRIPTION:{esc(description)}",
+                    "END:VEVENT",
+                ]
+            )
+
+        lines.append("END:VCALENDAR")
+        ics_content = "\r\n".join(lines) + "\r\n"
+
+        return Response(
+            ics_content,
+            mimetype="text/calendar",
+            headers={"Content-Disposition": f"inline; filename={brand}-calendar.ics"},
+        )
+
     # ──────────────────────────────────────────────────────────
     #  RUTAS PRINCIPALES
     # ──────────────────────────────────────────────────────────
 
     @app.route("/")
     def index():
-        return render_template("index.html")
+        brand = _auth_brand()
+        return render_template(
+            "index.html",
+            auth_brand=brand,
+            auth_label=config.BRANDS.get(brand, {}).get("label", ""),
+        )
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if request.method == "GET":
+            if _auth_brand():
+                return redirect("/")
+            return render_template("login.html", brands=config.BRANDS, error="")
+
+        data = request.get_json(silent=True) if request.is_json else request.form
+        brand = str(data.get("brand", "")).strip()
+        password = str(data.get("password", ""))
+        expected_password = config.BRAND_LOGIN_PASSWORDS.get(brand)
+
+        if not expected_password or password != expected_password:
+            if request.is_json:
+                return jsonify({"error": "Credenciales inválidas"}), 401
+            return render_template("login.html", brands=config.BRANDS, error="Credenciales inválidas")
+
+        session["auth_brand"] = brand
+        if request.is_json:
+            return jsonify({"message": "Login exitoso", "brand": brand})
+        return redirect("/")
+
+    @app.route("/logout", methods=["POST"])
+    def logout():
+        session.pop("auth_brand", None)
+        session.pop("oauth_state", None)
+        session.pop("oauth_brand", None)
+        return redirect("/login")
 
     @app.route("/terms")
     def terms():
@@ -92,13 +222,15 @@ def create_app() -> Flask:
 
     @app.route("/auth/tiktok")
     def auth_tiktok():
+        brand = _auth_brand() or "gymark"
         # Iniciar flujo OAuth con TikTok
         state = secrets.token_urlsafe(32)
         session['oauth_state'] = state
+        session['oauth_brand'] = brand
         
         # URL de autorización de TikTok
         auth_params = {
-            'client_key': config.BRANDS['gymark']['tiktok_client_key'],
+            'client_key': config.BRANDS[brand]['tiktok_client_key'],
             'scope': 'user.info.profile,user.info.stats,video.list,video.upload',
             'response_type': 'code',
             'redirect_uri': f"{config.PUBLIC_BASE_URL}/callback",
@@ -112,6 +244,7 @@ def create_app() -> Flask:
     @app.route("/callback")
     def oauth_callback():
         # Manejar callback OAuth de TikTok
+        brand = session.get("oauth_brand") or _auth_brand() or "gymark"
         code = request.args.get("code")
         state = request.args.get("state")
         error = request.args.get("error")
@@ -129,8 +262,8 @@ def create_app() -> Flask:
         # Intercambiar código por tokens
         try:
             token_data = {
-                'client_key': config.BRANDS['gymark']['tiktok_client_key'],
-                'client_secret': config.BRANDS['gymark']['tiktok_client_secret'],
+                'client_key': config.BRANDS[brand]['tiktok_client_key'],
+                'client_secret': config.BRANDS[brand]['tiktok_client_secret'],
                 'code': code,
                 'grant_type': 'authorization_code',
                 'redirect_uri': f"{config.PUBLIC_BASE_URL}/callback"
@@ -151,11 +284,12 @@ def create_app() -> Flask:
                 if access_token and open_id:
                     # Mostrar tokens para copiar al .env
                     file_path = "C:/Users/tutaa/Workspace/Python/Projects/Subir Videos/.env"
+                    brand_prefix = str(brand).upper()
                     return f"""<h2>🎉 OAuth Exitoso!</h2>
                     <p><strong>Copia estos valores a tu archivo .env:</strong></p>
                     <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px;">
-GYMARK_TIKTOK_ACCESS_TOKEN={access_token}
-GYMARK_TIKTOK_OPEN_ID={open_id}
+{brand_prefix}_TIKTOK_ACCESS_TOKEN={access_token}
+{brand_prefix}_TIKTOK_OPEN_ID={open_id}
                     </pre>
                     <p><strong>Archivo:</strong> <code>{file_path}</code></p>
                     <p><a href="/">← Volver a la aplicación</a></p>
@@ -177,22 +311,30 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
     @app.route("/api/brands", methods=["GET"])
     def list_brands():
         from config import BRANDS, BRAND_CATEGORIES
+        auth_brand = _auth_brand()
+        if not auth_brand:
+            return jsonify([])
+
+        cfg = BRANDS.get(auth_brand)
+        if not cfg:
+            return jsonify([])
+
         result = []
-        for key, cfg in BRANDS.items():
-            result.append({
-                "key":        key,
-                "label":      cfg["label"],
-                "color":      cfg["color"],
-                "platforms":  cfg["platforms"],
-                "categories": BRAND_CATEGORIES.get(key, []),
-            })
+        result.append({
+            "key":        auth_brand,
+            "label":      cfg["label"],
+            "color":      cfg["color"],
+            "platforms":  cfg["platforms"],
+            "categories": BRAND_CATEGORIES.get(auth_brand, []),
+        })
         return jsonify(result)
 
     # ── Videos ────────────────────────────────────────────────
 
     @app.route("/api/videos", methods=["GET"])
     def list_videos():
-        videos = Video.query.order_by(Video.uploaded_at.desc()).all()
+        auth_brand = _auth_brand()
+        videos = Video.query.filter(Video.brand == auth_brand).order_by(Video.uploaded_at.desc()).all()
         return jsonify([v.to_dict() for v in videos])
 
     @app.route("/api/videos/upload", methods=["POST"])
@@ -215,10 +357,8 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
         file_size = os.path.getsize(file_path)
         duration  = _get_video_duration(file_path)
         thumbnail = _generate_thumbnail(file_path, unique_name)
-        brand     = request.form.get("brand", "gymark")
+        brand = _auth_brand() or "gymark"
         category_id = request.form.get("category_id", "")
-        if brand not in config.BRANDS:
-            brand = "gymark"
 
         if not category_id and brand == "tatuct":
             category_id = "gaming"
@@ -245,7 +385,8 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
 
     @app.route("/api/videos/<int:video_id>", methods=["DELETE"])
     def delete_video(video_id):
-        video = Video.query.get_or_404(video_id)
+        auth_brand = _auth_brand()
+        video = Video.query.filter(Video.id == video_id, Video.brand == auth_brand).first_or_404()
         # Eliminar archivo físico
         if os.path.exists(video.file_path):
             os.remove(video.file_path)
@@ -263,14 +404,13 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
         data = request.json
         if not data or "video_id" not in data:
             return jsonify({"error": "Falta video_id"}), 400
+        auth_brand = _auth_brand()
         
-        video = Video.query.get(data["video_id"])
+        video = Video.query.filter(Video.id == data["video_id"], Video.brand == auth_brand).first()
         if not video:
             return jsonify({"error": "Video no encontrado"}), 404
         
-        brand = data.get("brand", video.brand)
-        if brand not in config.BRANDS:
-            return jsonify({"error": f"Marca inválida: {brand}"}), 400
+        brand = auth_brand
 
         category_id = str(data.get("category_id", "") or "").strip()
         brand_categories = config.BRAND_CATEGORIES.get(brand, [])
@@ -331,9 +471,10 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
 
     @app.route("/api/posts", methods=["GET"])
     def list_posts():
+        auth_brand = _auth_brand()
         status   = request.args.get("status")
         platform = request.args.get("platform")
-        q = Post.query.order_by(Post.scheduled_at.asc())
+        q = Post.query.filter(Post.brand == auth_brand).order_by(Post.scheduled_at.asc())
         if status:
             q = q.filter(Post.status == status)
         if platform:
@@ -342,62 +483,39 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
 
     @app.route("/calendar.ics", methods=["GET"])
     def calendar_ics():
-        posts = (
-            Post.query.filter(Post.status.in_(["scheduled", "posting", "published"]))
-            .order_by(Post.scheduled_at.asc())
-            .all()
+        auth_brand = _auth_brand()
+        posts = _calendar_posts_for_brand(auth_brand)
+        return _calendar_ics_response(auth_brand, posts, public_feed=False)
+
+    @app.route("/calendar/feed/<brand>.ics", methods=["GET"])
+    def public_calendar_feed(brand: str):
+        brand = str(brand or "").strip().lower()
+        if brand not in config.BRANDS:
+            return abort(404)
+
+        token = str(request.args.get("token", "")).strip()
+        expected = str(config.BRAND_CALENDAR_TOKENS.get(brand, "")).strip()
+        if not expected or token != expected:
+            return abort(403)
+
+        posts = _calendar_posts_for_brand(brand)
+        return _calendar_ics_response(brand, posts, public_feed=True)
+
+    @app.route("/api/calendar/feed-info", methods=["GET"])
+    def calendar_feed_info():
+        brand = _auth_brand() or "gymark"
+        token = config.BRAND_CALENDAR_TOKENS.get(brand, "")
+        feed_url = f"{config.PUBLIC_BASE_URL.rstrip('/')}/calendar/feed/{brand}.ics?{urlencode({'token': token})}"
+        google_subscribe_url = (
+            "https://calendar.google.com/calendar/render?"
+            + urlencode({"cid": feed_url})
         )
-
-        def esc(value: str) -> str:
-            return (
-                (value or "")
-                .replace("\\", "\\\\")
-                .replace(";", "\\;")
-                .replace(",", "\\,")
-                .replace("\n", "\\n")
-            )
-
-        lines = [
-            "BEGIN:VCALENDAR",
-            "VERSION:2.0",
-            "PRODID:-//Gymark//Subir Videos//ES",
-            "CALSCALE:GREGORIAN",
-            "METHOD:PUBLISH",
-            "X-WR-CALNAME:Gymark Publicaciones",
-            "X-WR-TIMEZONE:America/Bogota",
-        ]
-
-        now_utc = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-        for post in posts:
-            local_dt = post.scheduled_at.replace(tzinfo=COL_TZ)
-            start_utc = local_dt.astimezone(ZoneInfo("UTC"))
-            end_utc = start_utc + timedelta(minutes=30)
-
-            summary = f"{post.title} [{post.platform.upper()}]"
-            description = f"Marca: {post.brand}\\nEstado: {post.status}"
-            if post.description:
-                description += f"\\n{post.description}"
-
-            lines.extend(
-                [
-                    "BEGIN:VEVENT",
-                    f"UID:post-{post.id}@gymark.local",
-                    f"DTSTAMP:{now_utc}",
-                    f"DTSTART:{start_utc.strftime('%Y%m%dT%H%M%SZ')}",
-                    f"DTEND:{end_utc.strftime('%Y%m%dT%H%M%SZ')}",
-                    f"SUMMARY:{esc(summary)}",
-                    f"DESCRIPTION:{esc(description)}",
-                    "END:VEVENT",
-                ]
-            )
-
-        lines.append("END:VCALENDAR")
-        ics_content = "\r\n".join(lines) + "\r\n"
-
-        return Response(
-            ics_content,
-            mimetype="text/calendar",
-            headers={"Content-Disposition": "inline; filename=gymark-calendar.ics"},
+        return jsonify(
+            {
+                "brand": brand,
+                "feed_url": feed_url,
+                "google_subscribe_url": google_subscribe_url,
+            }
         )
 
     @app.route("/api/posts/schedule", methods=["POST"])
@@ -410,11 +528,12 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
         if missing:
             return jsonify({"error": f"Faltan campos: {', '.join(missing)}"}), 400
 
-        video = Video.query.get(data["video_id"])
+        auth_brand = _auth_brand()
+        video = Video.query.filter(Video.id == data["video_id"], Video.brand == auth_brand).first()
         if not video:
             return jsonify({"error": "Video no encontrado"}), 404
 
-        brand        = data.get("brand", "gymark")
+        brand        = auth_brand
         platforms    = data["platforms"]    # list
         title        = data["title"].strip()
         description  = data.get("description", "").strip()
@@ -482,7 +601,8 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
 
     @app.route("/api/posts/<int:post_id>", methods=["DELETE"])
     def cancel_post(post_id):
-        post = Post.query.get_or_404(post_id)
+        auth_brand = _auth_brand()
+        post = Post.query.filter(Post.id == post_id, Post.brand == auth_brand).first_or_404()
         if post.status == "published":
             return jsonify({"error": "No se puede cancelar un post ya publicado"}), 400
         post.status = "cancelled"
@@ -492,7 +612,8 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
     @app.route("/api/posts/<int:post_id>/publish-now", methods=["POST"])
     def publish_now(post_id):
         """Fuerza la publicación inmediata de un post programado."""
-        post = Post.query.get_or_404(post_id)
+        auth_brand = _auth_brand()
+        post = Post.query.filter(Post.id == post_id, Post.brand == auth_brand).first_or_404()
         if post.status not in ("scheduled", "failed"):
             return jsonify({"error": f"No se puede publicar con estado: {post.status}"}), 400
         # Mover scheduled_at a ahora para que el scheduler lo tome
@@ -507,22 +628,38 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
 
     @app.route("/api/hashtags/suggest", methods=["GET"])
     def suggest_hashtags():
-        content_type = request.args.get("content_type", "gaming")
+        auth_brand = _auth_brand() or "gymark"
+        default_type = "gaming" if auth_brand == "tatuct" else "acc_gimnasio"
+        content_type = request.args.get("content_type", default_type)
         platform     = request.args.get("platform", "tiktok")
+        allowed = set(config.BRAND_CATEGORIES.get(auth_brand, []))
+        if content_type not in allowed:
+            content_type = default_type
         tags = hashtag_svc.get_hashtags(content_type, platform)
         return jsonify({"hashtags": tags})
 
     @app.route("/api/hashtags/content-types", methods=["GET"])
     def content_types():
-        return jsonify(hashtag_svc.get_content_types())
+        auth_brand = _auth_brand() or "gymark"
+        allowed = set(config.BRAND_CATEGORIES.get(auth_brand, []))
+        types = [ct for ct in hashtag_svc.get_content_types() if ct.get("key") in allowed]
+        return jsonify(types)
 
     # ── Scheduling preview ────────────────────────────────────
 
     @app.route("/api/schedule/preview", methods=["POST"])
     def schedule_preview():
+        auth_brand = _auth_brand() or "gymark"
         data         = request.get_json(force=True)
-        platforms    = data.get("platforms", ["tiktok", "instagram", "facebook"])
-        content_type = data.get("content_type", "acc_gimnasio")
+        allowed_platforms = set(config.BRANDS.get(auth_brand, {}).get("platforms", ["tiktok"]))
+        platforms = [p for p in data.get("platforms", ["tiktok"]) if p in allowed_platforms]
+        if not platforms:
+            platforms = list(allowed_platforms)
+
+        default_type = "gaming" if auth_brand == "tatuct" else "acc_gimnasio"
+        content_type = data.get("content_type", default_type)
+        if content_type not in set(config.BRAND_CATEGORIES.get(auth_brand, [])):
+            content_type = default_type
         preview      = scheduler_svc.get_schedule_preview(platforms, content_type)
         return jsonify(preview)
 
@@ -530,25 +667,28 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
 
     @app.route("/api/dashboard", methods=["GET"])
     def dashboard():
+        auth_brand = _auth_brand()
         from sqlalchemy import func
-        total_videos    = Video.query.count()
-        total_posts     = Post.query.count()
-        published       = Post.query.filter_by(status="published").count()
-        scheduled       = Post.query.filter_by(status="scheduled").count()
-        failed          = Post.query.filter_by(status="failed").count()
+        total_videos    = Video.query.filter(Video.brand == auth_brand).count()
+        total_posts     = Post.query.filter(Post.brand == auth_brand).count()
+        published       = Post.query.filter(Post.brand == auth_brand, Post.status == "published").count()
+        scheduled       = Post.query.filter(Post.brand == auth_brand, Post.status == "scheduled").count()
+        failed          = Post.query.filter(Post.brand == auth_brand, Post.status == "failed").count()
 
         by_platform = db.session.query(
             Post.platform,
             func.count(Post.id).label("total"),
-        ).group_by(Post.platform).all()
+        ).filter(Post.brand == auth_brand).group_by(Post.platform).all()
 
         # Próximos 5 posts
         upcoming = Post.query.filter(
+            Post.brand == auth_brand,
             Post.status == "scheduled"
         ).order_by(Post.scheduled_at.asc()).limit(5).all()
 
         # Últimos 5 publicados
         recent = Post.query.filter(
+            Post.brand == auth_brand,
             Post.status == "published"
         ).order_by(Post.posted_at.desc()).limit(5).all()
 
@@ -567,33 +707,33 @@ GYMARK_TIKTOK_OPEN_ID={open_id}
 
     @app.route("/api/config/status", methods=["GET"])
     def config_status():
+        auth_brand = _auth_brand() or "gymark"
         from config import BRANDS
         status = {"timezone": config.TIMEZONE, "brands": {}}
-        for brand_key in BRANDS:
-            brand_cfg = BRANDS[brand_key]
-            tiktok_ok = bool(
-                brand_cfg.get("tiktok_client_key")
-                and brand_cfg.get("tiktok_client_secret")
-                and brand_cfg.get("tiktok_access_token")
-                and brand_cfg.get("tiktok_open_id")
-            )
-            instagram_ok = bool(
-                brand_cfg.get("instagram_account_id")
-                and brand_cfg.get("facebook_access_token")
-            )
-            facebook_ok = bool(
-                brand_cfg.get("facebook_page_id")
-                and brand_cfg.get("facebook_access_token")
-            )
-            status["brands"][brand_key] = {
-                "tiktok":    tiktok_ok,
-                "instagram": instagram_ok,
-                "facebook":  facebook_ok,
-            }
+        brand_cfg = BRANDS.get(auth_brand, {})
+        tiktok_ok = bool(
+            brand_cfg.get("tiktok_client_key")
+            and brand_cfg.get("tiktok_client_secret")
+            and brand_cfg.get("tiktok_access_token")
+            and brand_cfg.get("tiktok_open_id")
+        )
+        instagram_ok = bool(
+            brand_cfg.get("instagram_account_id")
+            and brand_cfg.get("facebook_access_token")
+        )
+        facebook_ok = bool(
+            brand_cfg.get("facebook_page_id")
+            and brand_cfg.get("facebook_access_token")
+        )
+        status["brands"][auth_brand] = {
+            "tiktok":    tiktok_ok,
+            "instagram": instagram_ok,
+            "facebook":  facebook_ok,
+        }
         # flatten para compatibilidad legado
-        status["tiktok"] = status["brands"].get("gymark", {}).get("tiktok", False)
-        status["instagram"] = status["brands"].get("gymark", {}).get("instagram", False)
-        status["facebook"] = status["brands"].get("gymark", {}).get("facebook", False)
+        status["tiktok"] = tiktok_ok
+        status["instagram"] = instagram_ok
+        status["facebook"] = facebook_ok
         return jsonify(status)
 
     # ── Archivos estáticos (thumbnails + uploads) ─────────────
