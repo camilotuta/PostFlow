@@ -47,6 +47,10 @@ const PERFECT_WINDOWS = {
     instagram: "Martes–Jueves · 11:00 / 14:00 / 17:00",
     facebook: "Lunes–Jueves · 09:00 / 12:00 / 15:00",
   },
+  milita_beauty: {
+    tiktok:
+      "Mar–Vie · 09:00 / 11:00 / 15:00 / 19:00–21:00  •  Sáb · 14:00 / 21:00",
+  },
 };
 
 /* ══════════════════════════════════════════════════════════════
@@ -1101,7 +1105,18 @@ function loadSchedulePreview() {
 
 async function submitSchedule() {
   const checkboxes = document.querySelectorAll(".sched-video-checkbox:checked");
-  const contentType = document.getElementById("contentTypeSelect").value;
+  const ctSel = document.getElementById("contentTypeSelect");
+  // fallback: pick first visible option if value is somehow empty
+  let contentType = ctSel?.value || "";
+  if (!contentType) {
+    const firstVisible = ctSel
+      ? [...ctSel.options].find((o) => !o.hidden && o.value)
+      : null;
+    if (firstVisible) {
+      contentType = firstVisible.value;
+      ctSel.value = firstVisible.value;
+    }
+  }
   const platforms = getSelectedPlatforms();
 
   if (checkboxes.length === 0) {
@@ -1189,16 +1204,39 @@ async function submitSchedule() {
      POSTS TABLE
   ════════════════════════════════════════════════════════════ */
 function initPostsFilter() {
-  document.querySelectorAll(".filter-btn").forEach((btn) => {
+  document.querySelectorAll(".filter-btn[data-status]").forEach((btn) => {
     btn.addEventListener("click", () => {
       document
-        .querySelectorAll(".filter-btn")
+        .querySelectorAll(".filter-btn[data-status]")
         .forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       currentFilter = btn.dataset.status;
       loadPostsTable();
     });
   });
+
+  const btnClear = document.getElementById("btnClearAllPosts");
+  if (btnClear) {
+    btnClear.addEventListener("click", async () => {
+      if (
+        !confirm(
+          "¿Seguro que quieres eliminar TODOS los posts del calendario? Esta acción no se puede deshacer.",
+        )
+      )
+        return;
+      try {
+        const res = await del("/api/posts/clear");
+        toast(
+          `Calendario limpiado: ${res.deleted} posts eliminados`,
+          "success",
+        );
+        loadPostsTable();
+        loadDashboard();
+      } catch (e) {
+        toast("Error al limpiar el calendario", "error");
+      }
+    });
+  }
 }
 
 async function loadPostsTable() {
@@ -1534,22 +1572,23 @@ function formatDateKey(date) {
 
 function copyCalendarFeed() {
   const run = async () => {
-    if (!calendarFeedInfoCache) {
-      calendarFeedInfoCache = await get("/api/calendar/feed-info");
-    }
+    calendarFeedInfoCache = await get("/api/calendar/feed-info");
 
     const feedUrl = calendarFeedInfoCache.feed_url;
+    const webcalUrl =
+      calendarFeedInfoCache.webcal_url ||
+      feedUrl.replace(/^https?:\/\//, "webcal://");
     const googleUrl =
       calendarFeedInfoCache.google_subscribe_url ||
-      "https://calendar.google.com/calendar/u/0/r/settings/addbyurl";
+      "https://calendar.google.com/calendar/r/settings/addbyurl";
 
-    await navigator.clipboard?.writeText(feedUrl);
-    toast("Link ICS de esta cuenta copiado", "success");
+    await navigator.clipboard?.writeText(webcalUrl);
+    toast("Link del calendario copiado ✓", "success");
     window.open(googleUrl, "_blank");
   };
 
   run().catch(() => {
-    toast("No se pudo copiar el feed de calendario", "error");
+    toast("No se pudo copiar el link", "error");
   });
 }
 

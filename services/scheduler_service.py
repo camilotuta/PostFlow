@@ -59,6 +59,20 @@ PERFECT_BEST_TIMES = {
         "instagram": {1: [11, 14, 17], 2: [11, 14, 17], 3: [11, 14, 17]},
         "facebook": {0: [9, 12, 15], 1: [9, 12, 15], 2: [9, 12, 15], 3: [9, 12, 15]},
     },
+    # ──────────────────────────────────────────────────────────────
+    # 💄 MILITA BEAUTY  (Milita – TikTok México UTC-6)
+    # Horas almacenadas en Colombia (UTC-5) = hora MX + 1
+    # Días estrella: Mar(1) Mié(2) Jue(3) Vie(4) Sáb(5)
+    # ──────────────────────────────────────────────────────────────
+    "milita_beauty": {
+        "tiktok": {
+            1: [10, 16, 20],      # Martes  ★ (MX 09/15/19h)
+            2: [10, 16, 20],      # Miércoles ★
+            3: [10, 16, 20, 23],  # Jueves  ★★ prime (MX 09/15/19/22h)
+            4: [10, 17, 20],      # Viernes ★ (MX 09/16/19h)
+            5: [15, 20],          # Sábado self-care (MX 14/19h)
+        },
+    },
 }
 
 

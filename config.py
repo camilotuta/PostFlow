@@ -10,7 +10,8 @@ BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR  = os.path.join(BASE_DIR, "static", "uploads")
 DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{os.path.join(BASE_DIR, 'socialmedia.db')}")
 SECRET_KEY  = os.environ.get("SECRET_KEY", "gymark-subirvideos-secret-2025")
-PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:5000")
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL") or \
+    ("https://" + os.environ["RAILWAY_PUBLIC_DOMAIN"] if os.environ.get("RAILWAY_PUBLIC_DOMAIN") else "http://localhost:5000")
 MAX_VIDEO_MB = 500
 ALLOWED_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm"}
 
@@ -46,8 +47,7 @@ TIMEZONE = "America/Bogota"
 #
 #   gymark  → marca de gym  (TikTok + Instagram)
 #   tatuct  → canal gaming  (solo TikTok)
-#
-#   Cada marca tiene sus propias credenciales en el .env
+#   milita  → belleza/fitness MX (solo TikTok)
 # ─────────────────────────────────────────────────────────────────
 
 BRANDS = {
@@ -55,48 +55,18 @@ BRANDS = {
         "label":    "Gymark 🏋️",
         "color":    "#6c63ff",
         "platforms": ["tiktok", "instagram"],
-        # ── TikTok ──────────────────────────────────────────────
-        "tiktok_client_key":    os.environ.get("GYMARK_TIKTOK_CLIENT_KEY", ""),
-        "tiktok_client_secret": os.environ.get("GYMARK_TIKTOK_CLIENT_SECRET", ""),
-        "tiktok_access_token":  os.environ.get("GYMARK_TIKTOK_ACCESS_TOKEN", ""),
-        "tiktok_open_id":       os.environ.get("GYMARK_TIKTOK_OPEN_ID", ""),
-        # ── Facebook Page ────────────────────────────────────────
-        "facebook_app_id":      os.environ.get("GYMARK_FACEBOOK_APP_ID", ""),
-        "facebook_app_secret":  os.environ.get("GYMARK_FACEBOOK_APP_SECRET", ""),
-        "facebook_page_id":     os.environ.get("GYMARK_FACEBOOK_PAGE_ID", ""),
-        "facebook_access_token":os.environ.get("GYMARK_FACEBOOK_ACCESS_TOKEN", ""),
-        # ── Instagram ────────────────────────────────────────────
-        "instagram_account_id": os.environ.get("GYMARK_INSTAGRAM_ACCOUNT_ID", ""),
-        # (Instagram reutiliza el facebook_access_token vía Graph API)
     },
     "tatuct": {
         "label":    "TatuCT 🎮",
         "color":    "#ff0050",
         "platforms": ["tiktok"],
-        # ── TikTok ──────────────────────────────────────────────
-        "tiktok_client_key":    os.environ.get("TATUCT_TIKTOK_CLIENT_KEY", ""),
-        "tiktok_client_secret": os.environ.get("TATUCT_TIKTOK_CLIENT_SECRET", ""),
-        "tiktok_access_token":  os.environ.get("TATUCT_TIKTOK_ACCESS_TOKEN", ""),
-        "tiktok_open_id":       os.environ.get("TATUCT_TIKTOK_OPEN_ID", ""),
-        # (no Facebook ni Instagram)
-        "facebook_app_id":      "",
-        "facebook_app_secret":  "",
-        "facebook_page_id":     "",
-        "facebook_access_token":"",
-        "instagram_account_id": "",
+    },
+    "milita": {
+        "label":    "Milita 💄",
+        "color":    "#ff69b4",
+        "platforms": ["tiktok"],
     },
 }
-
-# Legado (compatibilidad interna – usa gymark por defecto)
-TIKTOK_CLIENT_KEY     = BRANDS["gymark"]["tiktok_client_key"]
-TIKTOK_CLIENT_SECRET  = BRANDS["gymark"]["tiktok_client_secret"]
-TIKTOK_ACCESS_TOKEN   = BRANDS["gymark"]["tiktok_access_token"]
-TIKTOK_OPEN_ID        = BRANDS["gymark"]["tiktok_open_id"]
-FACEBOOK_APP_ID       = BRANDS["gymark"]["facebook_app_id"]
-FACEBOOK_APP_SECRET   = BRANDS["gymark"]["facebook_app_secret"]
-FACEBOOK_PAGE_ID      = BRANDS["gymark"]["facebook_page_id"]
-FACEBOOK_ACCESS_TOKEN = BRANDS["gymark"]["facebook_access_token"]
-INSTAGRAM_ACCOUNT_ID  = BRANDS["gymark"]["instagram_account_id"]
 
 # ─────────────────────────────────────────────────────────────────
 #   MEJORES HORARIOS POR CATEGORÍA Y PLATAFORMA  (Colombia UTC-5)
@@ -365,6 +335,33 @@ BEST_TIMES = {
             6: [9, 12],
         },
     },
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  💄 MILITA BEAUTY  (Milita – TikTok México UTC-6)
+    #  Fuente: Tiendanube MX + Sprout Social 2025 + Influencer Marketing Hub 2026
+    #  Nicho: Maquillaje + Fitness + Cuidado Personal + Amor Propio + Tips Belleza
+    #
+    #  Horarios en hora Colombia (UTC-5) = hora México (UTC-6) + 1 hora
+    #    MX 09:00 → CO 10:00    MX 11:00 → CO 12:00
+    #    MX 13:00 → CO 14:00    MX 15:00 → CO 16:00
+    #    MX 19:00 → CO 20:00    MX 20:00 → CO 21:00
+    #    MX 21:00 → CO 22:00    MX 22:00 → CO 23:00
+    #
+    #  Días estrella: Mar-Vie (midweek máximo engagement)
+    #  Sábado: self-care/amor propio relajado 14:00/22:00 MX
+    #  Lunes y Domingo: débiles – evitar al inicio para crecimiento explosivo
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    "milita_beauty": {
+        "tiktok": {
+            0: [],                          # Lunes  – débil (skip)
+            1: [10, 12, 14, 16, 20, 22],   # Martes  ★ (mañana + tarde + noche)
+            2: [10, 12, 14, 16, 20, 22],   # Miércoles ★
+            3: [10, 12, 14, 16, 20, 21, 23],  # Jueves ★★ prime máximo
+            4: [10, 16, 17, 20, 21],        # Viernes ★ pre-finde energizante
+            5: [15, 20, 23],                # Sábado – self-care/amor propio relajado
+            6: [],                          # Domingo – débil (skip)
+        },
+    },
 }
 
 # ─────────────────────────────────────────
@@ -421,6 +418,14 @@ HASHTAGS = {
         "#gymsetup", "#fitness", "#colombia", "#fyp", "#parati",
         "#homegymsetup", "#setupgym", "#entrenarencasa",
     ],
+    # ── Milita Beauty (Maquillaje + Fitness + Cuidado Personal + Amor Propio) ──
+    "milita_beauty": [
+        "#maquillaje", "#makeup", "#makeuptutorial", "#fitness",
+        "#cuidadopersonal", "#amorpropio", "#selflove", "#belleza",
+        "#tipsdebelleza", "#skincare", "#grwm", "#fyp",
+        "#paratii", "#mexico", "#fypmx", "#makeupmx",
+        "#vidafit", "#bienestar", "#rutinabelleza", "#empoderada",
+    ],
 }
 
 # Número máximo de hashtags por plataforma
@@ -435,16 +440,25 @@ BRAND_CATEGORIES = {
     "gymark": ["acc_gimnasio", "pilates_yoga", "sup_naturales",
                "ropa_deportiva", "sup_deportivos", "home_gym"],
     "tatuct": ["gaming"],
+    "milita": ["milita_beauty"],
 }
 
 # Login por cuenta/marca
 BRAND_LOGIN_PASSWORDS = {
     "gymark":  "gymark",
     "tatuct": "123",
+    "milita": "camilo",
 }
 
-# Tokens para feed ICS público por marca (usar valores secretos en producción)
+# Tokens para feed ICS público por marca
+# Si no están en el .env se derivan automáticamente del SECRET_KEY (estables entre reinicios)
+import hashlib as _hashlib
+def _cal_token(brand: str) -> str:
+    raw = f"{SECRET_KEY}:calendar:{brand}"
+    return _hashlib.sha256(raw.encode()).hexdigest()[:32]
+
 BRAND_CALENDAR_TOKENS = {
-    "gymark": os.environ.get("GYMARK_CALENDAR_TOKEN", "gymark-calendar-token"),
-    "tatuct": os.environ.get("TATUCT_CALENDAR_TOKEN", "tatuct-calendar-token"),
+    "gymark": os.environ.get("GYMARK_CALENDAR_TOKEN") or _cal_token("gymark"),
+    "tatuct": os.environ.get("TATUCT_CALENDAR_TOKEN") or _cal_token("tatuct"),
+    "milita": os.environ.get("MILITA_CALENDAR_TOKEN") or _cal_token("milita"),
 }

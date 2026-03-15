@@ -19,6 +19,7 @@ CONTENT_TYPE_LABELS = {
     "ropa_deportiva":"ropa_deportiva",
     "sup_deportivos":"sup_deportivos",
     "home_gym":      "home_gym",
+    "milita_beauty": "milita_beauty",
 }
 
 # Hashtags universales de alto alcance para relleno
@@ -50,7 +51,11 @@ class HashtagService:
         max_tags = count or MAX_HASHTAGS.get(platform, 10)
 
         # Fallback de categoría por marca (si llega una categoría inválida/vacía)
-        fallback_type = "gaming" if brand == "tatuct" else "acc_gimnasio"
+        fallback_type = (
+            "gaming" if brand == "tatuct"
+            else "milita_beauty" if brand == "milita"
+            else "acc_gimnasio"
+        )
         effective_type = content_type if content_type in HASHTAGS else fallback_type
 
         base_tags = list(HASHTAGS.get(effective_type, HASHTAGS[fallback_type]))
@@ -88,6 +93,7 @@ class HashtagService:
             {"key": "ropa_deportiva", "label": "Ropa Deportiva"},
             {"key": "sup_deportivos", "label": "Sup. Deportivos"},
             {"key": "home_gym",       "label": "Home Gym"},
+            {"key": "milita_beauty",  "label": "Beauty & Fitness"},
         ]
 
 

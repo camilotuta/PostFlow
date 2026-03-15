@@ -302,6 +302,17 @@ class AIService:
                                 "Marca de la cuenta: Gaming / Clips de stream (Tatuct)."
                                 if brand == "tatuct"
                                 else "Marca de la cuenta: Gimnasio / Ropa deportiva (Gymark)."
+                                if brand == "gymark"
+                                else (
+                                    "Cuenta personal de contenido femenino en México (@milita). "
+                                    "Nicho combinado: maquillaje (tutoriales GRWM, looks diarios, transformaciones), "
+                                    "fitness (rutinas, motivación, workouts), cuidado personal (skincare, hábitos), "
+                                    "amor propio (self-love, mindset, empoderamiento) y tips de belleza (hacks, "
+                                    "productos, técnicas). "
+                                    "Audiencia objetivo: mujeres 18-34 años en México. "
+                                    "Tono: cercano, empoderador, motivacional, femenino y auténtico. "
+                                    "Plataforma única: TikTok México."
+                                )
                             )
                             if category_id:
                                 context += f"\nCategoría de este video: {category_id}."
@@ -325,6 +336,8 @@ class AIService:
                                     or self._infer_gymark_category_from_text(raw_result)
                                     or "acc_gimnasio"
                                 )
+                            elif brand == "milita":
+                                parsed_result["category_id"] = "milita_beauty"
 
                             if self._looks_generic_or_audio_missing(parsed_result):
                                 last_error = ValueError("Respuesta genérica o sin señal de audio")

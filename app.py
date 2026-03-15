@@ -20,6 +20,7 @@ from flask import (
     send_from_directory, abort, redirect, session, Response
 )
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
 import config
@@ -41,6 +42,8 @@ COL_TZ = ZoneInfo(config.TIMEZONE)
 # ──────────────────────────────────────────────────────────────
 def create_app() -> Flask:
     app = Flask(__name__)
+    # Trust Railway's reverse proxy headers so request.host_url is the public domain
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     CORS(app)
 
     @app.route('/favicon.ico')
@@ -117,6 +120,13 @@ def create_app() -> Flask:
         brand_cfg = config.BRANDS.get(brand, {})
         calendar_label = str(brand_cfg.get("label") or brand).strip()
 
+        # Timezone por marca: milita usa México (UTC-6), resto Colombia (UTC-5)
+        BRAND_TIMEZONES = {
+            "milita": "America/Mexico_City",
+        }
+        brand_tz_name = BRAND_TIMEZONES.get(brand, config.TIMEZONE)
+        brand_tz = ZoneInfo(brand_tz_name)
+
         def esc(value: str) -> str:
             return (
                 (value or "")
@@ -133,30 +143,38 @@ def create_app() -> Flask:
             f"PRODID:-//PostFlow//{calendar_label}//ES",
             "CALSCALE:GREGORIAN",
             "METHOD:PUBLISH",
-            f"X-WR-CALNAME:{esc(calendar_label)} - Calendario PostFlow ({feed_type})",
-            "X-WR-TIMEZONE:America/Bogota",
+            f"X-WR-CALNAME:{esc(calendar_label)} - PostFlow ({feed_type})",
+            f"X-WR-TIMEZONE:{brand_tz_name}",
+            "X-WR-CALDESC:Calendario de publicaciones PostFlow",
+            "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
+            "X-PUBLISHED-TTL:PT1H",
         ]
 
         now_utc = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         for post in posts:
+            # scheduled_at se almacena como hora local Colombia (naive)
+            # Para milita hay que compensar la diferencia UTC-5 → UTC-6
             local_dt = post.scheduled_at.replace(tzinfo=COL_TZ)
             start_utc = local_dt.astimezone(ZoneInfo("UTC"))
             end_utc = start_utc + timedelta(minutes=30)
 
-            summary = f"{post.title} [{post.platform.upper()}]"
-            description = f"Marca: {post.brand}\\nEstado: {post.status}"
+            plat = (post.platform or "").upper()
+            summary = f"[{plat}] {post.title}"
+            description_parts = [f"Plataforma: {plat}", f"Estado: {post.status}", f"Marca: {post.brand}"]
             if post.description:
-                description += f"\\n{post.description}"
+                description_parts.append(post.description)
+            description = "\\n".join(description_parts)
 
             lines.extend(
                 [
                     "BEGIN:VEVENT",
-                    f"UID:post-{post.id}-{brand}@postflow.local",
+                    f"UID:post-{post.id}-{brand}@postflow",
                     f"DTSTAMP:{now_utc}",
                     f"DTSTART:{start_utc.strftime('%Y%m%dT%H%M%SZ')}",
                     f"DTEND:{end_utc.strftime('%Y%m%dT%H%M%SZ')}",
                     f"SUMMARY:{esc(summary)}",
                     f"DESCRIPTION:{esc(description)}",
+                    f"STATUS:{'CONFIRMED' if post.status == 'published' else 'TENTATIVE'}",
                     "END:VEVENT",
                 ]
             )
@@ -164,11 +182,17 @@ def create_app() -> Flask:
         lines.append("END:VCALENDAR")
         ics_content = "\r\n".join(lines) + "\r\n"
 
-        return Response(
+        response = Response(
             ics_content,
-            mimetype="text/calendar",
-            headers={"Content-Disposition": f"inline; filename={brand}-calendar.ics"},
+            mimetype="text/calendar; charset=utf-8",
+            headers={
+                "Content-Disposition": f"inline; filename={brand}-calendar.ics",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
         )
+        return response
 
     # ──────────────────────────────────────────────────────────
     #  RUTAS PRINCIPALES
@@ -362,6 +386,8 @@ def create_app() -> Flask:
 
         if not category_id and brand == "tatuct":
             category_id = "gaming"
+        if not category_id and brand == "milita":
+            category_id = "milita_beauty"
         brand_categories = config.BRAND_CATEGORIES.get(brand, [])
         allowed_categories = set(brand_categories)
         if category_id and category_id not in allowed_categories:
@@ -418,6 +444,8 @@ def create_app() -> Flask:
 
         if not category_id and brand == "tatuct":
             category_id = "gaming"
+        if not category_id and brand == "milita":
+            category_id = "milita_beauty"
         if category_id and category_id not in allowed_categories:
             return jsonify({"error": f"Categoría '{category_id}' no permitida para la marca {brand}"}), 400
 
@@ -505,15 +533,21 @@ def create_app() -> Flask:
     def calendar_feed_info():
         brand = _auth_brand() or "gymark"
         token = config.BRAND_CALENDAR_TOKENS.get(brand, "")
-        feed_url = f"{config.PUBLIC_BASE_URL.rstrip('/')}/calendar/feed/{brand}.ics?{urlencode({'token': token})}"
+
+        # Siempre usar el host real del request – es el mismo servidor que sirve el feed
+        base = request.host_url.rstrip("/")
+
+        feed_url = f"{base}/calendar/feed/{brand}.ics?{urlencode({'token': token})}"
+        webcal_url = feed_url.replace("https://", "webcal://").replace("http://", "webcal://")
         google_subscribe_url = (
             "https://calendar.google.com/calendar/render?"
-            + urlencode({"cid": feed_url})
+            + urlencode({"cid": webcal_url})
         )
         return jsonify(
             {
                 "brand": brand,
                 "feed_url": feed_url,
+                "webcal_url": webcal_url,
                 "google_subscribe_url": google_subscribe_url,
             }
         )
@@ -599,6 +633,16 @@ def create_app() -> Flask:
         logger.info(f"Programados {len(created_posts)} posts para video {video.id} (marca: {brand})")
         return jsonify({"posts": created_posts}), 201
 
+    @app.route("/api/posts/clear", methods=["DELETE"])
+    def clear_all_posts():
+        """Elimina TODOS los posts de la marca autenticada (no toca los videos)."""
+        auth_brand = _auth_brand()
+        if not auth_brand:
+            return jsonify({"error": "No autenticado"}), 401
+        deleted = Post.query.filter(Post.brand == auth_brand).delete()
+        db.session.commit()
+        return jsonify({"message": f"{deleted} posts eliminados", "deleted": deleted})
+
     @app.route("/api/posts/<int:post_id>", methods=["DELETE"])
     def cancel_post(post_id):
         auth_brand = _auth_brand()
@@ -629,7 +673,7 @@ def create_app() -> Flask:
     @app.route("/api/hashtags/suggest", methods=["GET"])
     def suggest_hashtags():
         auth_brand = _auth_brand() or "gymark"
-        default_type = "gaming" if auth_brand == "tatuct" else "acc_gimnasio"
+        default_type = "gaming" if auth_brand == "tatuct" else ("milita_beauty" if auth_brand == "milita" else "acc_gimnasio")
         content_type = request.args.get("content_type", default_type)
         platform     = request.args.get("platform", "tiktok")
         allowed = set(config.BRAND_CATEGORIES.get(auth_brand, []))
@@ -656,7 +700,7 @@ def create_app() -> Flask:
         if not platforms:
             platforms = list(allowed_platforms)
 
-        default_type = "gaming" if auth_brand == "tatuct" else "acc_gimnasio"
+        default_type = "gaming" if auth_brand == "tatuct" else ("milita_beauty" if auth_brand == "milita" else "acc_gimnasio")
         content_type = data.get("content_type", default_type)
         if content_type not in set(config.BRAND_CATEGORIES.get(auth_brand, [])):
             content_type = default_type
