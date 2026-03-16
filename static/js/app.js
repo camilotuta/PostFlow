@@ -131,6 +131,8 @@ function initTabs() {
       if (tab === "calendar") loadCalendarTab();
       if (tab === "schedule") loadScheduleTab();
       if (tab === "posts") loadPostsTable();
+      if (tab === "config") loadApiStatus();
+      if (tab === "dashboard") loadDashboard();
     });
   });
 
@@ -186,6 +188,61 @@ function renderPlatformBars(byPlatform, total) {
       </div>`;
     })
     .join("");
+}
+
+/* ══════════════════════════════════════════════════════════════
+   GLOBAL REFRESH  –  call after any mutating action
+   Refreshes dashboard + the currently visible tab + background caches
+════════════════════════════════════════════════════════════ */
+async function refreshAllData() {
+  // 1. Always refresh dashboard KPIs
+  try {
+    await loadDashboard();
+  } catch (e) {
+    console.warn("refreshAllData: dashboard", e);
+  }
+
+  // 2. Refresh cross-tab caches silently
+  try {
+    videos = await get("/api/videos");
+  } catch (e) {
+    /* ok */
+  }
+  try {
+    const posts = await get("/api/posts");
+    calendarPosts = posts;
+    allVideosCache = videos;
+    window._postsTableCache = {};
+    posts.forEach((p) => {
+      window._postsTableCache[p.id] = p;
+    });
+  } catch (e) {
+    /* ok */
+  }
+
+  // 3. Refresh active tab
+  const activeTab = document.querySelector(".nav-btn.active")?.dataset?.tab;
+  try {
+    if (activeTab === "upload") {
+      await loadVideoGallery();
+      await populateVideoSelect();
+    }
+    if (activeTab === "calendar") {
+      renderCalendarGrid();
+    }
+    if (activeTab === "schedule") {
+      await populateVideoSelect();
+      loadSchedulePreview();
+    }
+    if (activeTab === "posts") {
+      await loadPostsTable();
+    }
+    if (activeTab === "config") {
+      loadApiStatus();
+    }
+  } catch (e) {
+    console.warn("refreshAllData: tab", e);
+  }
 }
 
 function renderMiniList(elId, posts, type) {
@@ -532,8 +589,7 @@ async function uploadAllFiles() {
   progressLabel.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M20 6L9 17l-5-5"/></svg> ${done} de ${pending.length} video${pending.length > 1 ? "s" : ""} subidos`;
   isUploading = false;
   renderQueue();
-  loadVideoGallery();
-  loadDashboard();
+  await refreshAllData();
 
   // Limpiar los exitosos después de 3s
   setTimeout(() => {
@@ -693,8 +749,7 @@ async function deleteVideo(id) {
   try {
     await del(`/api/videos/${id}`);
     toast("Video eliminado", "info");
-    loadVideoGallery();
-    populateVideoSelect();
+    await refreshAllData();
   } catch (e) {
     toast("Error al eliminar", "error");
   }
@@ -740,9 +795,7 @@ async function changeVideoAccountAndRegenerateAI(videoId) {
     });
 
     toast("Cuenta actualizada y metadata IA regenerada", "success");
-    await loadVideoGallery();
-    await populateVideoSelect();
-    loadDashboard();
+    await refreshAllData();
   } catch (e) {
     toast(
       `No se pudo actualizar la cuenta: ${e?.error || "error desconocido"}`,
@@ -1210,8 +1263,8 @@ async function submitSchedule() {
     document
       .querySelectorAll(".sched-video-checkbox")
       .forEach((cb) => (cb.checked = false));
+    await refreshAllData();
     loadSchedulePreview();
-    loadDashboard();
   }
 
   btn.disabled = false;
@@ -1248,8 +1301,7 @@ function initPostsFilter() {
           `Calendario limpiado: ${res.deleted} posts eliminados`,
           "success",
         );
-        loadPostsTable();
-        loadDashboard();
+        await refreshAllData();
       } catch (e) {
         toast("Error al limpiar el calendario", "error");
       }
@@ -1311,8 +1363,7 @@ async function publishNow(id) {
   try {
     await post(`/api/posts/${id}/publish-now`, {});
     toast("Post enviado a publicar", "success");
-    loadPostsTable();
-    loadDashboard();
+    await refreshAllData();
   } catch (e) {
     toast("Error al publicar", "error");
   }
@@ -1323,8 +1374,7 @@ async function cancelPost(id) {
   try {
     await del(`/api/posts/${id}`);
     toast("Post cancelado", "info");
-    loadPostsTable();
-    loadDashboard();
+    await refreshAllData();
   } catch (e) {
     toast("Error al cancelar", "error");
   }
@@ -1984,10 +2034,7 @@ async function regeneratePostContent(postId) {
     }
 
     toast("✨ Contenido regenerado con éxito", "success");
-
-    // Refresh cached lists
-    if (typeof loadPostsTable === "function") loadPostsTable();
-    if (typeof loadDashboard === "function") loadDashboard();
+    await refreshAllData();
   } catch (e) {
     toast(`Error al regenerar: ${e.error || "intenta de nuevo"}`, "error");
   } finally {
