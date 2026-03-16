@@ -1495,16 +1495,39 @@ a:hover { text-decoration: underline; }
   flex: 1;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  grid-auto-rows: minmax(100px, 1fr); /* Filas flexibles */
+  grid-auto-rows: 130px; /* altura fija uniforme para todas las celdas */
   overflow-y: auto;
+  scrollbar-gutter: stable; /* reservar espacio del scrollbar para que el header no se desplace */
+}
+
+/* Cabeceras de días sticky DENTRO del grid (vista mes) */
+.cal-header-cell {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  padding: 10px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: .05em;
 }
 .cal-day {
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   padding: 8px;
-  min-height: 120px;
+  overflow: hidden; /* recorta el contenido que supere la altura fija de la fila */
   position: relative;
   transition: background .2s;
+}
+.cal-events {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .cal-day:hover {
   background: var(--bg3);
@@ -1664,12 +1687,13 @@ a:hover { text-decoration: underline; }
   border-color: var(--primary);
 }
 
-.event-time { color: var(--text3); font-size: 10px; }
+.event-time { color: var(--text3); font-size: 10px; flex-shrink: 0; }
 .event-title { 
   white-space: nowrap; 
   overflow: hidden; 
   text-overflow: ellipsis; 
-  flex: 1; 
+  flex: 1;
+  min-width: 0; /* necesario para que text-overflow funcione dentro de flex */
   color: var(--text);
 }
 .event-status {

@@ -1778,10 +1778,10 @@ function renderCalendarGrid() {
   let daysToRender = [];
 
   if (calendarView === "month") {
+    // En vista mes ocultamos el header externo y ponemos los nombres dentro del grid
+    // para que siempre estén alineados con sus columnas (evita desplazamiento con scrollbar)
     if (headerMap) {
-      headerMap.innerHTML = dayNames.map((d) => `<div>${d}</div>`).join("");
-      // shift monday to sunday if we use Mon-Sun. But here looks like Mon-Sun:
-      headerMap.innerHTML = `<div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>`;
+      headerMap.style.display = "none";
     }
 
     const firstDay = new Date(year, month, 1).getDay(); // 0 = Sunday
@@ -1816,6 +1816,7 @@ function renderCalendarGrid() {
       }
     }
   } else if (calendarView === "week") {
+    if (headerMap) headerMap.style.display = "";
     const currentDay = calendarDate.getDay();
     const startOffset = currentDay === 0 ? 6 : currentDay - 1; // Adjust for Monday start
     const weekStart = new Date(
@@ -1848,6 +1849,7 @@ function renderCalendarGrid() {
       daysToRender.push({ date: d, otherMonth: d.getMonth() !== month });
     }
   } else if (calendarView === "day") {
+    if (headerMap) headerMap.style.display = "";
     label.textContent = `${calendarDate.getDate()} de ${monthNames[month]} ${year}`;
     if (headerMap) {
       headerMap.innerHTML = `<div>${dayNames[calendarDate.getDay()]}</div>`;
@@ -1857,7 +1859,19 @@ function renderCalendarGrid() {
 
   const today = new Date();
 
-  // Render the grid cells
+  // Render the grid cells — acumulamos HTML en string para luego asignarlo de una sola vez
+  // (evita reconstruir el DOM en cada iteración y mantiene alineación correcta)
+  let gridHtml = "";
+
+  // En vista mes: insertar cabeceras de días como primera fila del grid (sticky)
+  // Así siempre estarán alineadas con sus columnas sin importar el scrollbar
+  if (calendarView === "month") {
+    const hdrDays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+    gridHtml += hdrDays
+      .map((d) => `<div class="cal-header-cell">${d}</div>`)
+      .join("");
+  }
+
   daysToRender.forEach((item) => {
     const cellDate = item.date;
     const dateStr = formatDateKey(cellDate);
@@ -1899,8 +1913,10 @@ function renderCalendarGrid() {
     });
 
     cellHtml += `</div></div>`;
-    grid.innerHTML += cellHtml;
+    gridHtml += cellHtml;
   });
+
+  grid.innerHTML = gridHtml;
 
   grid.querySelectorAll(".cal-event[data-post-id]").forEach((eventEl) => {
     eventEl.addEventListener("click", () => {
