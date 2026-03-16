@@ -27,31 +27,40 @@ class AIService:
             "response_mime_type": "application/json"
         }
 
+    @staticmethod
+    def _friendly_model_name(model_name: str) -> str:
+        txt = str(model_name or "").strip()
+        mapping = {
+            "models/gemini-2.5-pro": "Gemini 2.5 Pro",
+            "models/gemini-2.5-flash": "Gemini 2.5 Flash",
+        }
+        return mapping.get(txt, txt.replace("models/", "").replace("-", " ").title())
+
     def _build_prompt(self, context: str, strict_audio: bool = True, category_detection: bool = False) -> str:
         extra_audio_rules = ""
         if strict_audio:
             extra_audio_rules = """
-                    9. PRIMERO debes escuchar y transcribir mentalmente el audio del clip antes de redactar.
-                    10. El titulo y la descripcion deben reflejar una frase, palabra o intención real detectada en el audio y la acción visual principal.
-                    11. Si NO hay voz clara, usa sonidos/música/efectos como contexto y coloca "sin_voz_clara" en frase_audio_literal.
-                    12. Incluye 3 campos extra en el JSON: "audio_clave", "frase_audio_literal" y "visual_clave".
-                    13. DA PRIORIDAD a audio + acciones visuales (qué pasa en escena). El texto en pantalla (subtítulos/OCR) es secundario.
-                    14. SOLO usa texto en pantalla si coincide con lo que se oye o con la acción visual principal.
-                    15. PROHIBIDO mencionar "IA", "AI", "inteligencia artificial", "chatgpt", "gemini" o similares en titulo/descripcion.
+                    6. PRIMERO debes escuchar y transcribir mentalmente el audio del clip antes de redactar.
+                    7. El titulo y la descripcion deben reflejar una frase, palabra o intención real detectada en el audio y la acción visual principal.
+                    8. Si NO hay voz clara, usa sonidos/música/efectos como contexto y coloca "sin_voz_clara" en frase_audio_literal.
+                    9. Incluye 3 campos extra en el JSON: "audio_clave", "frase_audio_literal" y "visual_clave".
+                    10. DA PRIORIDAD a audio + acciones visuales (qué pasa en escena). El texto en pantalla (subtítulos/OCR) es secundario.
+                    11. SOLO usa texto en pantalla si coincide con lo que se oye o con la acción visual principal.
+                    12. PROHIBIDO mencionar "IA", "AI", "inteligencia artificial", "chatgpt", "gemini" o similares en titulo/descripcion.
             """
 
         category_rules = ""
         category_field = ""
         if category_detection:
             category_rules = """
-                    16. Debes clasificar el video en EXACTAMENTE una categoría de Gymark usando SOLO estas opciones:
+                    13. Debes clasificar el video en EXACTAMENTE una categoría de Gymark usando SOLO estas opciones:
                         - acc_gimnasio
                         - pilates_yoga
                         - sup_naturales
                         - ropa_deportiva
                         - sup_deportivos
                         - home_gym
-                    17. Si dudas entre dos, elige la más específica según el producto/acción dominante del clip.
+                    14. Si dudas entre dos, elige la más específica según el producto/acción dominante del clip.
             """
             category_field = ',\n                      "category_id": "una de las 6 categorías de gymark"'
 
@@ -63,15 +72,11 @@ class AIService:
                     2. La descripción debe ser CORTA. Nadie lee descripciones largas en TikTok/Reels. Máximo 2 oraciones.
                     3. Analiza el audio detalladamente para entender el contexto real de la situación.
                     4. Mantén el lenguaje coloquial real detectado en el contenido. Si hay groserías fuertes, inclúyelas porque se procesarán automáticamente.
-                    5. Los hashtags DEBEN ser específicos del contenido real de ESTE video: palabras clave de la escena, juego/producto, acción, chiste, frase o tema exacto del audio.
-                    6. Evita hashtags genéricos repetidos entre videos (ej: #viral, #fyp, #parati) salvo máximo 1 de ese tipo.
-                    7. Genera entre 8 y 12 hashtags únicos, en minúsculas y empezando por #.
-                    8. PUNTUACIÓN ESPAÑOLA OBLIGATORIA: Si la oración es exclamativa, usa '¡' al inicio y '!' al final. Si tiene pregunta, usa '¿' antes de la parte interrogativa y '?' al final. Siempre cierra cada oración con su signo correspondiente. Ej correcto: '¡Malparido! ¿Por qué me la matas?'
-                    9 (original 8). Devuelve EXCLUSIVAMENTE un JSON válido con esta estructura exacta:
+                                        5. PUNTUACIÓN ESPAÑOLA OBLIGATORIA: Si la oración es exclamativa, usa '¡' al inicio y '!' al final. Si tiene pregunta, usa '¿' antes de la parte interrogativa y '?' al final. Siempre cierra cada oración con su signo correspondiente. Ej correcto: '¡Malparido! ¿Por qué me la matas?'
+                                        6. Devuelve EXCLUSIVAMENTE un JSON válido con esta estructura exacta:
                     {{
                       "titulo": "Título Gancho Corto Aquí",
                       "descripcion": "Descripción ultracorta (1 o 2 líneas). Incluye 1 o 2 emojis llamativos. Un pequeño gancho.",
-                      "hashtags": ["#nicho1", "#viral2"],
                       "audio_clave": "resumen de lo escuchado en el audio",
                                             "frase_audio_literal": "frase exacta detectada en audio o sin_voz_clara",
                                                                                         "visual_clave": "acción visual principal del clip"{category_field}
@@ -87,14 +92,22 @@ class AIService:
     _PROFANITY_PATTERNS: list[tuple[str, str]] = [
         # (regex_pattern, replacement_hint) – hint unused, handled by _censor_word
         # Each pattern uses word boundaries; inner letters replaced by *
+        (r"maric[ao]s?", None),
+        (r"marik[ao]s?", None),
+        (r"hpt[ao]?s?", None),
+        (r"hijuep(?:uta|uto|utas|utos)", None),
         (r"malparid[ao]s?", None),
         (r"hijueput[ao]s?", None),
         (r"gonorre[ao]s?", None),
+        (r"gonorrea[s]?", None),
         (r"culicagad[ao]s?", None),
         (r"mamahuev[ao]s?", None),
         (r"putísim[ao]s?", None),
         (r"putas?", None),
         (r"putos?", None),
+        (r"mierder[ao]s?", None),
+        (r"est[uú]pid[ao]s?", None),
+        (r"idiot[ao]s?", None),
         (r"vergas?", None),
         (r"pendej[ao]s?", None),
         (r"coñ[ao]s?", None),
@@ -269,12 +282,9 @@ class AIService:
     def _looks_generic_or_audio_missing(self, result: dict) -> bool:
         title = str(result.get("titulo", "")).strip().lower()
         desc = str(result.get("descripcion", "")).strip().lower()
-        tags = [str(t).lower() for t in (result.get("hashtags", []) or [])]
         audio_phrase = str(result.get("frase_audio_literal", "")).strip().lower()
 
         if len(title) < 8:
-            return True
-        if len(tags) < 5:
             return True
 
         generic_patterns = [
@@ -284,10 +294,6 @@ class AIService:
             r"no te lo pierdas",
         ]
         if any(re.search(pattern, title) for pattern in generic_patterns):
-            return True
-
-        generic_count = sum(1 for t in tags if t in {"#viral", "#fyp", "#parati", "#trending"})
-        if generic_count >= 3:
             return True
 
         if not audio_phrase:
@@ -312,7 +318,6 @@ class AIService:
             str(result.get("descripcion", "")),
             str(result.get("audio_clave", "")),
             str(result.get("visual_clave", "")),
-            " ".join([str(t) for t in (result.get("hashtags", []) or [])]),
         ]).lower()
 
         keyword_map = {
@@ -335,10 +340,17 @@ class AIService:
             return best_category
         return "acc_gimnasio"
     
-    def generate_metadata(self, video_path: str, brand: str, category_id: str, extra_context: str = "") -> dict:
+    def generate_metadata(
+        self,
+        video_path: str,
+        brand: str,
+        category_id: str,
+        extra_context: str = "",
+        progress_callback=None,
+    ) -> dict:
         """
-        Sube el video a Gemini y genera título, descripción y hashtags basados
-        en la marca (gymark/tatuct) y el tipo de contenido/categoría.
+        Sube el video a Gemini y genera título/descripcion basados
+        en la marca (gymark/tatuct/milita) y la categoría.
 
         Args:
             extra_context: Contexto adicional o feedback del usuario para mejorar la generación.
@@ -355,6 +367,12 @@ class AIService:
 
             for model_name in self.model_names:
                 logger.info(f"Intentando generación con modelo (prioridad): {model_name}")
+                friendly_model = self._friendly_model_name(model_name)
+                if callable(progress_callback):
+                    try:
+                        progress_callback(model_name=friendly_model, phase="preparing")
+                    except Exception:
+                        pass
 
                 for key_index, api_key in enumerate(self.api_keys, start=1):
                     genai.configure(api_key=api_key)
@@ -367,11 +385,21 @@ class AIService:
                     for attempt in range(max_retries_per_key_model):
                         video_file = None
                         try:
+                            if callable(progress_callback):
+                                try:
+                                    progress_callback(model_name=friendly_model, phase="uploading")
+                                except Exception:
+                                    pass
                             video_file = genai.upload_file(path=video_path)
                             logger.info(f"Video subido con éxito: URI={video_file.uri}")
 
                             while video_file.state.name == "PROCESSING":
                                 logger.info("Esperando que Gemini procese el video...")
+                                if callable(progress_callback):
+                                    try:
+                                        progress_callback(model_name=friendly_model, phase="processing_video")
+                                    except Exception:
+                                        pass
                                 time.sleep(3)
                                 video_file = genai.get_file(video_file.name)
 
@@ -407,10 +435,16 @@ class AIService:
                             )
 
                             logger.info(f"Generando contenido con {model_name} (key {key_index})...")
+                            if callable(progress_callback):
+                                try:
+                                    progress_callback(model_name=friendly_model, phase="generating")
+                                except Exception:
+                                    pass
                             response = model.generate_content([video_file, prompt])
                             raw_result = json.loads(response.text)
                             parsed_result = self._normalize_result(raw_result)
                             parsed_result = self._enforce_audio_alignment(parsed_result)
+                            parsed_result["model_used"] = friendly_model
 
                             if brand == "gymark":
                                 parsed_result["category_id"] = (

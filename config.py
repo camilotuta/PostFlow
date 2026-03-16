@@ -368,71 +368,68 @@ BEST_TIMES = {
 #   HASHTAGS POR CATEGORÍA DE CONTENIDO
 # ─────────────────────────────────────────
 HASHTAGS = {
-    # ── Gaming / Twitch ──────────────────────────────────────────
+    # ── TatuCT (Gaming Twitch – solo TikTok) ─────────────────────
     "gaming": [
-        "#twitch", "#twitchcolombia", "#tatuct", "#gaming", "#fyp",
-        "#parati", "#streaminglatino", "#gaminglatino",
-        "#videojuegos", "#gamer", "#stream", "#twitchclips",
-        "#gameplay", "#colombia", "#clips", "#funny",
-        "#videojuegosespanol", "#highlights", "#gaming2025", "#clipsgaming",
+        "#GamingColombia", "#GamersColombia", "#Colombiagamer", "#GamingEnEspañol",
+        "#TwitchColombia", "#StreamersColombianos", "#VideojuegosColombia", "#Twitch",
+        "#Gaming", "#Gamer", "#fyp", "#ForYou", "#TikTokGaming", "#BogotaGamer",
     ],
-    # ── Accesorios de Gimnasio ────────────────────────────────────
+    # ── Gymark: Accesorios para gym ───────────────────────────────
     "acc_gimnasio": [
-        "#gym", "#gimnasio", "#gymark", "#gymarkco", "#accesoriosgym",
-        "#fitness", "#workout", "#entrenamiento", "#fitnesscolombia",
-        "#gymlife", "#gymaccessories", "#parati", "#fyp",
-        "#gymark🏋️", "#equipogym", "#gymequipment",
+        "#GymAccessories", "#AccesoriosGym", "#FitnessGear", "#Gym", "#Fitness",
+        "#Workout", "#GymLife", "#ColombiaFit", "#GymColombia", "#AccesoriosDeportivos",
     ],
-    # ── Pilates & Yoga ────────────────────────────────────────────
+    # ── Gymark: Accesorios de pilates y yoga ──────────────────────
     "pilates_yoga": [
-        "#pilates", "#yoga", "#wellness", "#bienestar", "#yogafitness",
-        "#pilateslife", "#gymark", "#gymarkco", "#flexibilidad",
-        "#mindandbody", "#saludmental", "#yogacolombia", "#fyp",
-        "#pilateslovers", "#yogacolombiana", "#breathe",
+        "#Pilates", "#Yoga", "#AccesoriosYoga", "#PilatesReformer", "#YogaColombia",
+        "#Fitness", "#PilatesLovers", "#PilatesColombia", "#ColombiaFit",
     ],
-    # ── Suplementos Naturales ─────────────────────────────────────
+    # ── Gymark: Suplementos naturales ─────────────────────────────
     "sup_naturales": [
-        "#suplementosnaturales", "#nutricion", "#salud", "#natural",
-        "#bienestar", "#gymark", "#gymarkco", "#vitaminas",
-        "#saludable", "#nutricioncolombia", "#fyp", "#parati",
-        "#suplementoscolombia", "#vidanatural", "#plantbased",
+        "#SuplementosNaturales", "#Suplementos", "#Bienestar", "#NutricionNatural",
+        "#ProductosNaturales", "#Salud", "#Fitness", "#SuplementosColombia",
+        "#Natural", "#ColombiaFit",
     ],
-    # ── Ropa Deportiva ────────────────────────────────────────────
+    # ── Gymark: Ropa deportiva ─────────────────────────────────────
     "ropa_deportiva": [
-        "#ropadeportiva", "#sportswear", "#fitnessfashion", "#activewear",
-        "#gym", "#gymark", "#gymarkco", "#modadeportiva",
-        "#outfitgym", "#fitgirl", "#fitboy", "#fyp", "#parati",
-        "#gymoutfit", "#lookdeportivo", "#colombiafashion",
+        "#RopaDeportiva", "#GymWear", "#Activewear", "#RopaGym", "#FitnessFashion",
+        "#GymClothes", "#ColombiaFit", "#RopaDeportivaColombia", "#Fit", "#GymLife",
     ],
-    # ── Suplementos Deportivos ────────────────────────────────────
+    # ── Gymark: Suplementos deportivos ─────────────────────────────
     "sup_deportivos": [
-        "#suplementosdeportivos", "#proteina", "#creatina", "#preworkout",
-        "#gym", "#gymark", "#gymarkco", "#musculos",
-        "#bodybuilding", "#fitness", "#nutriciondeportiva", "#fyp",
-        "#massamuscular", "#ganarmusculos", "#suplementoscol",
+        "#SuplementosDeportivos", "#SuplementosColombia", "#Fitness", "#Gym", "#Proteina",
+        "#Nutricion", "#GymMotivation", "#SuplementosBogota", "#ColombiaFit", "#Workout",
     ],
-    # ── Home Gym ──────────────────────────────────────────────────
+    # ── Gymark: Equipos de gym en casa ─────────────────────────────
     "home_gym": [
-        "#homegym", "#gimnasioencasa", "#workout", "#gymark", "#gymarkco",
-        "#fitnesscasa", "#entrenamiento", "#hometraining",
-        "#gymsetup", "#fitness", "#colombia", "#fyp", "#parati",
-        "#homegymsetup", "#setupgym", "#entrenarencasa",
+        "#GimnasioEnCasa", "#HomeGym", "#GymEnCasa", "#EquiposGym", "#Fitness",
+        "#HomeWorkout", "#GymMotivation", "#ColombiaFit", "#GimnasioColombia",
     ],
-    # ── Milita Beauty (Maquillaje + Fitness + Cuidado Personal + Amor Propio) ──
+    # ── Milita (solo TikTok) ───────────────────────────────────────
     "milita_beauty": [
-        "#maquillaje", "#makeup", "#makeuptutorial", "#fitness",
-        "#cuidadopersonal", "#amorpropio", "#selflove", "#belleza",
-        "#tipsdebelleza", "#skincare", "#grwm", "#fyp",
-        "#paratii", "#mexico", "#fypmx", "#makeupmx",
-        "#vidafit", "#bienestar", "#rutinabelleza", "#empoderada",
+        "#Maquillaje", "#Belleza", "#MaquillajeColombia", "#MaquillajeBogota",
+        "#TipsDeBelleza", "#MakeupTutorial", "#CuidadoPersonal", "#Skincare",
+        "#AmorPropio", "#CuidadodelaPiel", "#Fitness", "#GlowUp", "#fyp",
+        "#ForYou", "#Viral",
     ],
 }
 
-# Número máximo de hashtags por plataforma
+# Gymark: hashtags virales FIJOS (van en todos los videos sin excepción)
+GYMARK_VIRAL_HASHTAGS = [
+    "#fyp",
+    "#ForYou",
+    "#Viral",
+    "#GymTok",
+    "#FitnessMotivation",
+    "#ColombiaFit",
+    "#GymColombia",
+]
+
+# Número máximo de hashtags por plataforma (legacy)
 MAX_HASHTAGS = {
-    "tiktok": 8,
+    "tiktok": 12,
     "instagram": 30,
-    "facebook": 5,
+    "facebook": 30,
 }
 
 # Categorías permitidas por marca

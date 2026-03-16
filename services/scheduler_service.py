@@ -16,64 +16,87 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from config import TIMEZONE, UPLOAD_DIR
+from config import TIMEZONE, UPLOAD_DIR, BRANDS
 from database import db, Post
 
 logger = logging.getLogger(__name__)
 
 COL_TZ = ZoneInfo(TIMEZONE)
+BRAND_TIMEZONES = {
+    "milita": "America/Mexico_City",
+}
 
-PERFECT_BEST_TIMES = {
+SCHEDULE_SLOTS = {
     "gaming": {
-        "tiktok": {3: [19, 21, 23], 4: [19, 21, 23], 5: [19, 21, 23], 6: [19, 21, 23]},
-        "instagram": {1: [17, 19, 21], 2: [17, 19, 21], 3: [17, 19, 21], 5: [17, 19, 21]},
-        "facebook": {0: [9, 15, 18], 1: [9, 15, 18], 2: [9, 15, 18], 3: [9, 15, 18], 4: [9, 15, 18]},
+        "tiktok": {
+            1: ["20:00"],
+            2: ["21:00"],
+            3: ["19:30", "23:00"],
+            4: ["20:00"],
+            5: ["20:00", "22:00"],
+        },
     },
     "acc_gimnasio": {
-        "tiktok": {0: [17, 19, 21], 1: [17, 19, 21], 2: [17, 19, 21], 3: [17, 19, 21], 4: [17, 19, 21]},
-        "instagram": {1: [11, 14, 17], 2: [11, 14, 17], 3: [11, 14, 17]},
-        "facebook": {0: [9, 12, 15], 1: [9, 12, 15], 2: [9, 12, 15], 3: [9, 12, 15]},
+        "tiktok": {1: ["20:00"], 3: ["20:00"]},
+        "instagram": {1: ["12:00", "19:00"], 3: ["12:00", "19:00"]},
+        "facebook": {1: ["12:00", "19:00"], 3: ["12:00", "19:00"]},
     },
     "pilates_yoga": {
-        "tiktok": {0: [17, 19, 20], 1: [17, 19, 20], 2: [17, 19, 20], 6: [17, 19, 20]},
-        "instagram": {1: [11, 14, 19], 2: [11, 14, 19], 3: [11, 14, 19]},
-        "facebook": {1: [9, 11, 15], 2: [9, 11, 15], 3: [9, 11, 15]},
+        "tiktok": {2: ["19:30"], 5: ["19:30"]},
+        "instagram": {2: ["11:00", "19:00"], 5: ["11:00", "19:00"]},
+        "facebook": {2: ["09:00", "19:00"], 5: ["09:00", "19:00"]},
     },
     "sup_naturales": {
-        "tiktok": {1: [14, 17, 19], 2: [14, 17, 19], 3: [14, 17, 19]},
-        "instagram": {0: [11, 14, 17], 1: [11, 14, 17], 2: [11, 14, 17]},
-        "facebook": {1: [9, 10, 14], 2: [9, 10, 14], 3: [9, 10, 14]},
+        "tiktok": {1: ["20:00"], 2: ["20:00"]},
+        "instagram": {1: ["11:00", "19:00"], 2: ["11:00", "19:00"]},
+        "facebook": {1: ["09:00", "19:00"], 2: ["09:00", "19:00"]},
     },
     "ropa_deportiva": {
-        "tiktok": {0: [15, 18, 20], 1: [15, 18, 20], 2: [15, 18, 20], 3: [15, 18, 20], 4: [15, 18, 20]},
-        "instagram": {1: [11, 14, 17], 2: [11, 14, 17], 3: [11, 14, 17]},
-        "facebook": {0: [9, 12, 15], 1: [9, 12, 15], 2: [9, 12, 15], 3: [9, 12, 15]},
+        "tiktok": {1: ["20:00"], 3: ["20:00"]},
+        "instagram": {1: ["12:00", "19:00"], 3: ["12:00", "19:00"]},
+        "facebook": {1: ["12:00", "19:00"], 3: ["12:00", "19:00"]},
     },
     "sup_deportivos": {
-        "tiktok": {0: [17, 19, 21], 1: [17, 19, 21], 2: [17, 19, 21], 3: [17, 19, 21], 4: [17, 19, 21]},
-        "instagram": {1: [11, 14, 17], 2: [11, 14, 17], 3: [11, 14, 17]},
-        "facebook": {0: [9, 12, 15], 1: [9, 12, 15], 2: [9, 12, 15], 3: [9, 12, 15]},
+        "tiktok": {1: ["20:00"], 2: ["20:00"]},
+        "instagram": {1: ["11:00", "19:00"], 2: ["11:00", "19:00"]},
+        "facebook": {1: ["09:00", "19:00"], 2: ["09:00", "19:00"]},
     },
     "home_gym": {
-        "tiktok": {0: [17, 19, 21], 1: [17, 19, 21], 2: [17, 19, 21], 3: [17, 19, 21], 4: [17, 19, 21]},
-        "instagram": {1: [11, 14, 17], 2: [11, 14, 17], 3: [11, 14, 17]},
-        "facebook": {0: [9, 12, 15], 1: [9, 12, 15], 2: [9, 12, 15], 3: [9, 12, 15]},
+        "tiktok": {3: ["19:30"], 4: ["19:30"]},
+        "instagram": {3: ["12:00", "19:30"], 4: ["12:00", "19:30"]},
+        "facebook": {3: ["12:00", "19:00"], 4: ["12:00", "19:00"]},
     },
-    # ──────────────────────────────────────────────────────────────
-    # 💄 MILITA BEAUTY  (Milita – TikTok México UTC-6)
-    # Horas almacenadas en Colombia (UTC-5) = hora MX + 1
-    # Días estrella: Mar(1) Mié(2) Jue(3) Vie(4) Sáb(5)
-    # ──────────────────────────────────────────────────────────────
     "milita_beauty": {
         "tiktok": {
-            1: [10, 16, 20],      # Martes  ★ (MX 09/15/19h)
-            2: [10, 16, 20],      # Miércoles ★
-            3: [10, 16, 20, 23],  # Jueves  ★★ prime (MX 09/15/19/22h)
-            4: [10, 17, 20],      # Viernes ★ (MX 09/16/19h)
-            5: [15, 20],          # Sábado self-care (MX 14/19h)
+            1: ["09:00", "13:00"],
+            2: ["10:00"],
+            3: ["19:30"],
+            4: ["10:00", "19:30"],
+            6: ["10:00"],
         },
     },
 }
+
+
+def _brand_timezone(brand: str) -> ZoneInfo:
+    tz_name = BRAND_TIMEZONES.get(str(brand or "").lower(), TIMEZONE)
+    return ZoneInfo(tz_name)
+
+
+def _parse_time_slot(slot) -> tuple[int, int]:
+    if isinstance(slot, int):
+        return int(slot), 0
+
+    if isinstance(slot, (tuple, list)) and len(slot) == 2:
+        return int(slot[0]), int(slot[1])
+
+    txt = str(slot or "").strip()
+    if not txt:
+        return 10, 0
+    if ":" in txt:
+        hh, mm = txt.split(":", 1)
+        return int(hh), int(mm)
+    return int(txt), 0
 
 
 # ──────────────────────────────────────────────────────────────
@@ -118,11 +141,17 @@ class SchedulerService:
     ) -> datetime:
         """
         Devuelve el próximo slot óptimo para la plataforma y categoría dada.
-        Si `after` es None, usa ahora (Colombia).
+        Si `after` es None, usa ahora en timezone de la marca.
         """
-        now = after or datetime.now(COL_TZ)
-        # Tabla: PERFECT_BEST_TIMES[content_type][platform]
-        cat_times = PERFECT_BEST_TIMES.get(content_type, PERFECT_BEST_TIMES["acc_gimnasio"])
+        brand_tz = _brand_timezone(brand)
+        if after is None:
+            now = datetime.now(brand_tz)
+        elif after.tzinfo is None:
+            now = after.replace(tzinfo=brand_tz)
+        else:
+            now = after.astimezone(brand_tz)
+
+        cat_times = SCHEDULE_SLOTS.get(content_type, SCHEDULE_SLOTS["acc_gimnasio"])
         table = cat_times.get(platform, cat_times.get("tiktok", {}))
 
         # Intentar en los próximos días, respetando SOLO los días configurados
@@ -134,26 +163,28 @@ class SchedulerService:
             if not hours:
                 continue
 
-            for hour in sorted(hours):
+            for slot in hours:
+                hour, minute = _parse_time_slot(slot)
                 candidate = datetime(
                     candidate_date.year,
                     candidate_date.month,
                     candidate_date.day,
-                    hour, 0, 0,
-                    tzinfo=COL_TZ,
+                    hour,
+                    minute,
+                    0,
+                    tzinfo=brand_tz,
                 )
                 # Mínimo 5 minutos en el futuro
                 if candidate > now + timedelta(minutes=5):
-                    # Check database for slots taken at this hour
-                    start_of_hour = candidate.replace(tzinfo=None)
-                    end_of_hour = start_of_hour + timedelta(hours=1)
+                    start_of_slot = candidate.replace(tzinfo=None)
+                    end_of_slot = start_of_slot + timedelta(minutes=1)
                     
                     posts_in_slot = Post.query.filter(
                         Post.platform == platform,
                         Post.brand == brand,
                         Post.status.in_(["scheduled", "posting"]),
-                        Post.scheduled_at >= start_of_hour,
-                        Post.scheduled_at < end_of_hour
+                        Post.scheduled_at >= start_of_slot,
+                        Post.scheduled_at < end_of_slot,
                     ).count()
                     
                     if posts_in_slot < 2:
@@ -163,11 +194,14 @@ class SchedulerService:
         tomorrow = now + timedelta(days=1)
         return datetime(
             tomorrow.year, tomorrow.month, tomorrow.day,
-            10, 0, 0, tzinfo=COL_TZ,
+            10, 0, 0, tzinfo=brand_tz,
         )
 
     def get_schedule_preview(
-        self, platforms: list[str], content_type: str = "acc_gimnasio"
+        self,
+        platforms: list[str],
+        content_type: str = "acc_gimnasio",
+        brand: str = "gymark",
     ) -> dict:
         """
         Devuelve los próximos 3 mejores horarios por plataforma y categoría.
@@ -178,7 +212,7 @@ class SchedulerService:
             slots = []
             after = None
             for _ in range(3):
-                slot  = self.get_next_best_time(platform, after, content_type)
+                slot  = self.get_next_best_time(platform, after, content_type, brand=brand)
                 slots.append(slot.strftime("%A %d %b · %H:%M"))
                 after = slot + timedelta(minutes=10)
             preview[platform] = slots
@@ -192,13 +226,15 @@ class SchedulerService:
         if not self.app:
             return
         with self.app.app_context():
-            now   = datetime.now(COL_TZ).replace(tzinfo=None)
-            posts = Post.query.filter(
-                Post.status == "scheduled",
-                Post.scheduled_at <= now,
-            ).all()
-            for post in posts:
-                self._publish_post(post)
+            for brand in BRANDS.keys():
+                now_brand = datetime.now(_brand_timezone(brand)).replace(tzinfo=None)
+                posts = Post.query.filter(
+                    Post.status == "scheduled",
+                    Post.brand == brand,
+                    Post.scheduled_at <= now_brand,
+                ).all()
+                for post in posts:
+                    self._publish_post(post)
 
     def _publish_post(self, post: Post):
         """Publica un post individual y actualiza su estado."""

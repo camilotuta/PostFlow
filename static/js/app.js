@@ -13,43 +13,42 @@ let uploadBrand = "gymark"; // marca activa en el tab de subir
 
 const PERFECT_WINDOWS = {
   gaming: {
-    tiktok: "Jueves–Domingo · 19:00 / 21:00 / 23:00",
-    instagram: "Martes–Jueves + Sábado · 17:00 / 19:00 / 21:00",
-    facebook: "Lunes–Viernes · 09:00 / 15:00 / 18:00",
+    tiktok:
+      "TikTok · COT · Mar 20:00 · Mié 21:00 · Jue 19:30 / 23:00 · Vie 20:00 · Sáb 20:00 / 22:00",
   },
   acc_gimnasio: {
-    tiktok: "Lunes–Viernes · 17:00 / 19:00 / 21:00",
-    instagram: "Martes–Jueves · 11:00 / 14:00 / 17:00",
-    facebook: "Lunes–Jueves · 09:00 / 12:00 / 15:00",
+    tiktok: "TikTok · COT · Mar / Jue 20:00",
+    instagram: "Instagram · COT · Mar / Jue 12:00 y 19:00",
+    facebook: "Facebook · COT · Mar / Jue 12:00 y 19:00",
   },
   pilates_yoga: {
-    tiktok: "Lunes–Miércoles + Domingo · 17:00 / 19:00 / 20:00",
-    instagram: "Martes–Jueves · 11:00 / 14:00 / 19:00",
-    facebook: "Martes–Jueves · 09:00 / 11:00 / 15:00",
+    tiktok: "TikTok · COT · Mié / Sáb 19:30",
+    instagram: "Instagram · COT · Mié / Sáb 11:00 y 19:00",
+    facebook: "Facebook · COT · Mié / Sáb 09:00 y 19:00",
   },
   sup_naturales: {
-    tiktok: "Martes–Jueves · 14:00 / 17:00 / 19:00",
-    instagram: "Lunes–Miércoles · 11:00 / 14:00 / 17:00",
-    facebook: "Martes–Jueves · 09:00 / 10:00 / 14:00",
+    tiktok: "TikTok · COT · Mar / Mié 20:00",
+    instagram: "Instagram · COT · Mar / Mié 11:00 y 19:00",
+    facebook: "Facebook · COT · Mar / Mié 09:00 y 19:00",
   },
   ropa_deportiva: {
-    tiktok: "Lunes–Viernes · 15:00 / 18:00 / 20:00",
-    instagram: "Martes–Jueves · 11:00 / 14:00 / 17:00",
-    facebook: "Lunes–Jueves · 09:00 / 12:00 / 15:00",
+    tiktok: "TikTok · COT · Mar / Jue 20:00",
+    instagram: "Instagram · COT · Mar / Jue 12:00 y 19:00",
+    facebook: "Facebook · COT · Mar / Jue 12:00 y 19:00",
   },
   sup_deportivos: {
-    tiktok: "Lunes–Viernes · 17:00 / 19:00 / 21:00",
-    instagram: "Martes–Jueves · 11:00 / 14:00 / 17:00",
-    facebook: "Lunes–Jueves · 09:00 / 12:00 / 15:00",
+    tiktok: "TikTok · COT · Mar / Mié 20:00",
+    instagram: "Instagram · COT · Mar / Mié 11:00 y 19:00",
+    facebook: "Facebook · COT · Mar / Mié 09:00 y 19:00",
   },
   home_gym: {
-    tiktok: "Lunes–Viernes · 17:00 / 19:00 / 21:00",
-    instagram: "Martes–Jueves · 11:00 / 14:00 / 17:00",
-    facebook: "Lunes–Jueves · 09:00 / 12:00 / 15:00",
+    tiktok: "TikTok · COT · Jue / Vie 19:30",
+    instagram: "Instagram · COT · Jue / Vie 12:00 y 19:30",
+    facebook: "Facebook · COT · Jue / Vie 12:00 y 19:00",
   },
   milita_beauty: {
     tiktok:
-      "Mar–Vie · 09:00 / 11:00 / 15:00 / 19:00–21:00  •  Sáb · 14:00 / 21:00",
+      "TikTok · CST México · Mar 09:00 / 13:00 · Mié 10:00 · Jue 19:30 · Vie 10:00 / 19:30 · Dom 10:00",
   },
 };
 
@@ -532,26 +531,41 @@ async function uploadAllFiles() {
           progressLabel.textContent = `Subiendo "${item.file.name}" · ${pct}%`;
         },
       );
+      let aiResult = null;
 
       try {
         const aiStEl = document.querySelector(`#qi-${item.id} .qi-status`);
-        if (aiStEl)
-          aiStEl.innerHTML =
-            "<div class='spinner' style='width:12px;height:12px;display:inline-block;border-width:2px;margin-right:5px;vertical-align:middle;border-top-color:#6c63ff;border-right-color:#6c63ff;border-radius:50%;animation:spin 1s linear infinite'></div> IA...";
-        await generateAIWithRetry(
+        if (aiStEl) aiStEl.textContent = "Procesando con Gemini 2.5 Pro...";
+        progressLabel.textContent = `Procesando "${item.file.name}" con Gemini 2.5 Pro...`;
+        aiResult = await generateAIWithRetry(
           {
             video_id: result.id,
             brand: item.brand,
             category_id: catId,
           },
-          ({ attempt, waitSeconds }) => {
+          ({ attempt, waitSeconds, model, phase, queued }) => {
             if (aiStEl) {
-              aiStEl.textContent = `IA en cola (${attempt}) · esperando ${waitSeconds}s`;
+              if (queued && waitSeconds > 0) {
+                aiStEl.textContent = `IA en cola (${attempt}) · esperando ${waitSeconds}s`;
+              } else if (model) {
+                aiStEl.textContent = `Procesando con ${model}...`;
+              } else if (phase === "queued") {
+                aiStEl.textContent = "Preparando IA...";
+              }
             }
-            progressLabel.textContent = `Esperando IA para "${item.file.name}" · ${waitSeconds}s`;
+            if (queued && waitSeconds > 0) {
+              progressLabel.textContent = `Esperando IA para "${item.file.name}" · ${waitSeconds}s`;
+            } else if (model) {
+              progressLabel.textContent = `Procesando "${item.file.name}" con ${model}...`;
+            } else {
+              progressLabel.textContent = `Preparando IA para "${item.file.name}"...`;
+            }
           },
         );
-        if (aiStEl) aiStEl.textContent = "Listo";
+        if (aiStEl)
+          aiStEl.textContent = aiResult?.model_used
+            ? `Listo · ${aiResult.model_used}`
+            : "Listo";
       } catch (e) {
         console.error("Error de IA:", e);
         try {
@@ -571,8 +585,10 @@ async function uploadAllFiles() {
       item.status = "done";
       item.pct = 100;
       done++;
+      const displayName =
+        String(aiResult?.titulo || "").trim() || getVideoDisplayName(result);
       toast(
-        `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M20 6L9 17l-5-5"/></svg> "${result.original_name}" subido y procesado por IA (${result.file_size_mb} MB)`,
+        `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M20 6L9 17l-5-5"/></svg> "${displayName}" subido y procesado por IA (${result.file_size_mb} MB)`,
         "success",
       );
     } catch (err) {
@@ -648,13 +664,52 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function buildAIRequestId() {
+  return `ai-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 async function generateAIWithRetry(payload, onWait) {
   let attempt = 1;
 
   while (true) {
+    const requestId = buildAIRequestId();
+    let pollTimer = null;
     try {
-      return await post("/api/ai/generate", payload);
+      if (typeof onWait === "function") {
+        onWait({
+          attempt,
+          waitSeconds: 0,
+          model: null,
+          phase: "queued",
+          queued: true,
+        });
+      }
+
+      pollTimer = setInterval(async () => {
+        try {
+          const status = await get(`/api/ai/status/${requestId}`);
+          if (typeof onWait === "function") {
+            onWait({
+              attempt,
+              waitSeconds: 0,
+              model: status?.model || null,
+              phase: status?.phase || null,
+              queued: false,
+            });
+          }
+        } catch (e) {
+          /* ignore polling errors */
+        }
+      }, 1200);
+
+      const result = await post("/api/ai/generate", {
+        ...payload,
+        request_id: requestId,
+      });
+      if (pollTimer) clearInterval(pollTimer);
+      return result;
     } catch (err) {
+      if (pollTimer) clearInterval(pollTimer);
       const is429 =
         (err && err._status === 429) ||
         /\b429\b/.test(String(err?.error || ""));
@@ -662,7 +717,14 @@ async function generateAIWithRetry(payload, onWait) {
 
       const waitSeconds = parseRetryAfterSeconds(err);
       if (typeof onWait === "function") {
-        onWait({ attempt, waitSeconds, error: err });
+        onWait({
+          attempt,
+          waitSeconds,
+          error: err,
+          model: null,
+          phase: "quota",
+          queued: true,
+        });
       }
       await sleep(waitSeconds * 1000);
       attempt += 1;
@@ -703,7 +765,7 @@ async function loadVideoGallery() {
           }
         </div>
         <div class="video-card__info">
-          <div class="video-card__name">${v.original_name}</div>
+          <div class="video-card__name">${getVideoDisplayName(v)}</div>
           <div class="video-card__meta">${v.file_size_mb} MB \u00b7 ${v.duration ? v.duration + "s" : "\u2013"}</div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
             <span class="vbrand-badge" style="background:${bm.color}">${bm.label}</span>
@@ -1015,7 +1077,7 @@ async function populateVideoSelect() {
                 <span class="video-list-main">
                   ${v.thumbnail ? `<img src="${v.thumbnail}" class="video-list-thumb" />` : `<div class="video-list-placeholder"></div>`}
                   <div class="video-list-text">
-                      <div class="video-list-name">${v.original_name}</div>
+                      <div class="video-list-name">${getVideoDisplayName(v)}</div>
                       <div class="video-list-meta">${v.file_size_mb} MB ${v.ai_title ? "· ✅ IA lista" : "· ⚠️ Sin IA"}</div>
                   </div>
                 </span>
@@ -1105,7 +1167,7 @@ function onVideoSelectChange() {
     placeholder.classList.add("hidden");
     if (metaEl)
       metaEl.textContent =
-        `${video.original_name} · ${video.file_size_mb} MB` +
+        `${getVideoDisplayName(video)} · ${video.file_size_mb} MB` +
         (video.duration ? ` · ${video.duration}s` : "");
 
     // Auto-select AI-detected category for Gymark videos
@@ -1146,26 +1208,13 @@ function loadSchedulePreview() {
   const video = videos.find((v) => v.id == id);
   if (!video) return;
 
-  const titleText = video.ai_title || video.original_name;
+  const titleText = getVideoDisplayName(video);
   const descText = video.ai_description || "";
-  let hashText = "";
-  try {
-    const arr =
-      typeof video.ai_hashtags === "string"
-        ? JSON.parse(video.ai_hashtags)
-        : video.ai_hashtags || [];
-    hashText = arr
-      .map((h) => String(h || "").trim())
-      .filter(Boolean)
-      .map((h) => (h.startsWith("#") ? h : `#${h}`))
-      .join(" ");
-  } catch (e) {}
 
   let html = `<div style="font-size:14px; font-weight:bold; margin-bottom:5px;">${titleText}</div>`;
   if (descText)
     html += `<div style="font-size:13px; color:#ddd; margin-bottom:5px;">${descText}</div>`;
-  if (hashText)
-    html += `<div style="font-size:13px; color:#00f2fe; margin-bottom:5px;">${hashText}</div>`;
+  html += `<div style="font-size:12px; color:#00f2fe; margin-bottom:5px;">Hashtags fijos por cuenta/categoría se aplicarán al programar</div>`;
 
   if (checkboxes.length > 1) {
     html += `<div style="font-size:12px; color:#ff0050; margin-top:10px; font-style:italic;">Y ${checkboxes.length - 1} video(s) más seleccionados</div>`;
@@ -1210,26 +1259,13 @@ async function submitSchedule() {
     const video = videos.find((v) => v.id == videoId);
     if (!video) continue;
 
-    // Transform the AI hashtags which might be JSON arrays to comma separated values for the payload (if backend requires it) or just send array
-    let rawHash = [];
-    try {
-      rawHash = video.ai_hashtags
-        ? typeof video.ai_hashtags === "string"
-          ? JSON.parse(video.ai_hashtags)
-          : video.ai_hashtags
-        : [];
-    } catch (e) {
-      /* string format possibly */
-    }
-
     const payload = {
       video_id: parseInt(videoId),
       brand: currentBrand,
       platforms,
       content_type: contentType,
-      title: video.ai_title || video.original_name.replace(/\.[^/.]+$/, ""),
+      title: getVideoDisplayName(video),
       description: video.ai_description || "",
-      custom_hashtags: rawHash,
       schedule_mode: scheduleMode,
     };
 
@@ -1238,7 +1274,7 @@ async function submitSchedule() {
       const timeVal = document.getElementById("postTime").value;
       if (!dateVal || !timeVal) {
         toast(
-          "Ingresa fecha y hora para programar " + video.original_name,
+          "Ingresa fecha y hora para programar " + getVideoDisplayName(video),
           "error",
         );
         continue; // Skip this one, or just stop
@@ -1251,7 +1287,7 @@ async function submitSchedule() {
       successCount++;
     } catch (e) {
       toast(
-        `Error con ${video.original_name}: ${e.error || JSON.stringify(e)}`,
+        `Error con ${getVideoDisplayName(video)}: ${e.error || JSON.stringify(e)}`,
         "error",
       );
     }
@@ -1328,9 +1364,10 @@ async function loadPostsTable() {
 
     tbody.innerHTML = posts
       .map((p) => {
-        const vidName =
-          videos.find((v) => v.id === p.video_id)?.original_name ||
-          `Video #${p.video_id}`;
+        const videoRef = videos.find((v) => v.id === p.video_id);
+        const vidName = videoRef
+          ? getVideoDisplayName(videoRef)
+          : `Video #${p.video_id}`;
         return `
         <tr>
           <td data-label="Video">${truncate(vidName, 22)}</td>
@@ -1486,6 +1523,17 @@ function toast(msg, type = "info") {
 ════════════════════════════════════════════════════════════ */
 function truncate(s, n) {
   return s && s.length > n ? s.slice(0, n) + "…" : s || "";
+}
+
+function getVideoDisplayName(video) {
+  const aiTitle = String(video?.ai_title || "").trim();
+  if (aiTitle) return aiTitle;
+
+  const originalName = String(video?.original_name || "").trim();
+  if (!originalName) {
+    return video?.id ? `Video #${video.id}` : "Video";
+  }
+  return originalName.replace(/\.[^/.]+$/, "") || originalName;
 }
 
 function isMobileViewport() {
@@ -1722,7 +1770,7 @@ function renderCalendarQueue(videos) {
       (v) => `
       <div class="queue-item" data-id="${v.id}">
         <img src="${v.thumbnail ? `/static/uploads/thumbs/${v.thumbnail}` : ""}" class="queue-thumbnail" loading="lazy">
-        <div class="queue-title">${v.original_name || "Video"}</div>
+        <div class="queue-title">${getVideoDisplayName(v)}</div>
         <div class="queue-drag-hint"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> Programa desde la pestaña Programar</div>
       </div>
     `,
@@ -1945,6 +1993,7 @@ function openCalendarPostModal(post) {
     allVideosCache.find((v) => v.id === post.video_id) ||
     videos.find((v) => v.id === post.video_id);
   const videoSrc = video?.filename ? `/static/uploads/${video.filename}` : "";
+  const downloadUrl = `/api/posts/${post.id}/download-video`;
   const hashtags = Array.isArray(post.hashtags) ? post.hashtags : [];
   const desc = post.description?.trim() || "Sin descripción";
   const contentType = contentTypeLabel(post.content_type || "")
@@ -1961,6 +2010,12 @@ function openCalendarPostModal(post) {
         <span class="calendar-chip">${statusLabel(post.status)}</span>
         <span class="calendar-chip">${post.scheduled_at || "Sin fecha"}</span>
         <span class="calendar-chip">${post.brand ? post.brand.toUpperCase() : ""}</span>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn btn-ghost btn-sm" href="${downloadUrl}">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+          Descargar video HQ
+        </a>
       </div>
     </div>
     <div class="calendar-post-body">

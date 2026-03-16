@@ -1,13 +1,9 @@
 """
-Servicio de Hashtags Inteligentes
-Genera hashtags optimizados según:
-  - Categoría de contenido (gaming, gym, etc.)
-  - Plataforma destino (tiktok, instagram, facebook)
-  - Límites de la plataforma
+Servicio de Hashtags Fijos
+Devuelve hashtags estáticos por cuenta/categoría.
 """
 
-import random
-from config import HASHTAGS, MAX_HASHTAGS
+from config import HASHTAGS, GYMARK_VIRAL_HASHTAGS
 
 
 # Map de etiquetas "bonitas" → clave interna
@@ -22,13 +18,6 @@ CONTENT_TYPE_LABELS = {
     "milita_beauty": "milita_beauty",
 }
 
-# Hashtags universales de alto alcance para relleno
-UNIVERSAL_TAGS = [
-    "#colombia", "#colombia🇨🇴", "#viral", "#fyp", "#parati",
-    "#explorepage", "#trending", "#2025", "#reels", "#contenido",
-]
-
-
 class HashtagService:
 
     def get_hashtags(
@@ -40,16 +29,14 @@ class HashtagService:
         count: int | None = None,
     ) -> list[str]:
         """
-        Devuelve lista de hashtags optimizada para la plataforma.
+        Devuelve lista de hashtags fijos para la plataforma.
         
         Args:
             content_type: clave del tipo de contenido (ej: 'gaming', 'home_gym')
             platform: 'tiktok', 'instagram' o 'facebook'
-            custom_extra: hashtags adicionales del usuario
-            count: número deseado (si None, usa el máximo de la plataforma)
+            custom_extra: parámetro legacy (se ignora)
+            count: límite opcional explícito
         """
-        max_tags = count or MAX_HASHTAGS.get(platform, 10)
-
         # Fallback de categoría por marca (si llega una categoría inválida/vacía)
         fallback_type = (
             "gaming" if brand == "tatuct"
@@ -59,27 +46,30 @@ class HashtagService:
         effective_type = content_type if content_type in HASHTAGS else fallback_type
 
         base_tags = list(HASHTAGS.get(effective_type, HASHTAGS[fallback_type]))
-        extra_tags = [str(t).strip() for t in (custom_extra or []) if str(t).strip()]
+        fixed_tags = list(base_tags)
 
-        # Regla clave: priorizar hashtags de IA/custom sobre los genéricos de categoría.
-        prioritized = _dedupe(extra_tags + base_tags)
+        # Gymark: siempre agregar los virales fijos en todas las categorías/plataformas.
+        if brand == "gymark":
+            fixed_tags = _dedupe(fixed_tags + list(GYMARK_VIRAL_HASHTAGS))
 
-        if len(prioritized) < max_tags:
-            fill = [t for t in UNIVERSAL_TAGS if t.lower() not in {x.lower() for x in prioritized}]
-            random.shuffle(fill)
-            prioritized += fill
+        # Tatuct / Milita en TikTok: mantener salida fija en rango sugerido (8-12)
+        limit = count
+        if limit is None and platform == "tiktok" and brand in {"tatuct", "milita"}:
+            limit = 12
+        if limit is None:
+            limit = len(fixed_tags)
 
-        selected = prioritized[:max_tags]
-        return [_normalize_hashtag(t) for t in selected]
+        selected = fixed_tags[:max(1, int(limit))]
+        return [_normalize_hashtag(t) for t in selected if str(t).strip()]
 
-    def get_suggestions(self, content_type: str) -> dict:
+    def get_suggestions(self, content_type: str, brand: str | None = None) -> dict:
         """
         Devuelve sugerencias de hashtags por plataforma para mostrar en la UI.
         """
         return {
-            "tiktok":    self.get_hashtags(content_type, "tiktok"),
-            "instagram": self.get_hashtags(content_type, "instagram"),
-            "facebook":  self.get_hashtags(content_type, "facebook"),
+            "tiktok":    self.get_hashtags(content_type, "tiktok", brand=brand),
+            "instagram": self.get_hashtags(content_type, "instagram", brand=brand),
+            "facebook":  self.get_hashtags(content_type, "facebook", brand=brand),
         }
 
     @staticmethod

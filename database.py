@@ -27,7 +27,6 @@ class Video(db.Model):
     category_id    = db.Column(db.String(64), nullable=True)
     ai_title       = db.Column(db.String(512), nullable=True)
     ai_description = db.Column(db.Text, nullable=True)
-    ai_hashtags    = db.Column(db.Text, nullable=True)
 
     posts = db.relationship("Post", backref="video", lazy=True, cascade="all, delete-orphan")
 
@@ -43,7 +42,6 @@ class Video(db.Model):
             "category_id":   self.category_id,
             "ai_title":      self.ai_title,
             "ai_description":self.ai_description,
-            "ai_hashtags":   json.loads(self.ai_hashtags) if self.ai_hashtags else [],
             "posts":         [p.to_dict() for p in self.posts],
         }
 

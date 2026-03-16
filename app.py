@@ -11,13 +11,14 @@ import re
 import logging
 import requests
 import secrets
+import threading
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from urllib.parse import urlencode
 
 from flask import (
     Flask, request, jsonify, render_template,
-    send_from_directory, abort, redirect, session, Response
+    send_from_directory, send_file, abort, redirect, session, Response
 )
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -36,6 +37,33 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 COL_TZ = ZoneInfo(config.TIMEZONE)
+BRAND_TIMEZONES = {
+    "milita": "America/Mexico_City",
+}
+
+
+def _brand_timezone(brand: str) -> ZoneInfo:
+    tz_name = BRAND_TIMEZONES.get(str(brand or "").strip().lower(), config.TIMEZONE)
+    return ZoneInfo(tz_name)
+AI_REQUEST_STATUS: dict[str, dict] = {}
+AI_REQUEST_STATUS_LOCK = threading.Lock()
+
+
+def _set_ai_request_status(request_id: str, **payload):
+    if not request_id:
+        return
+    with AI_REQUEST_STATUS_LOCK:
+        current = dict(AI_REQUEST_STATUS.get(request_id, {}))
+        current.update(payload)
+        current["updated_at"] = datetime.utcnow().isoformat() + "Z"
+        AI_REQUEST_STATUS[request_id] = current
+
+
+def _clear_ai_request_status(request_id: str):
+    if not request_id:
+        return
+    with AI_REQUEST_STATUS_LOCK:
+        AI_REQUEST_STATUS.pop(request_id, None)
 
 # ──────────────────────────────────────────────────────────────
 #   APP FACTORY
@@ -120,10 +148,6 @@ def create_app() -> Flask:
         brand_cfg = config.BRANDS.get(brand, {})
         calendar_label = str(brand_cfg.get("label") or brand).strip()
 
-        # Timezone por marca: milita usa México (UTC-6), resto Colombia (UTC-5)
-        BRAND_TIMEZONES = {
-            "milita": "America/Mexico_City",
-        }
         brand_tz_name = BRAND_TIMEZONES.get(brand, config.TIMEZONE)
         brand_tz = ZoneInfo(brand_tz_name)
 
@@ -152,9 +176,8 @@ def create_app() -> Flask:
 
         now_utc = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         for post in posts:
-            # scheduled_at se almacena como hora local Colombia (naive)
-            # Para milita hay que compensar la diferencia UTC-5 → UTC-6
-            local_dt = post.scheduled_at.replace(tzinfo=COL_TZ)
+            # scheduled_at se almacena naive en hora local de la marca
+            local_dt = post.scheduled_at.replace(tzinfo=brand_tz)
             start_utc = local_dt.astimezone(ZoneInfo("UTC"))
             end_utc = start_utc + timedelta(minutes=30)
 
@@ -431,6 +454,7 @@ def create_app() -> Flask:
         if not data or "video_id" not in data:
             return jsonify({"error": "Falta video_id"}), 400
         auth_brand = _auth_brand()
+        request_id = str(data.get("request_id", "") or "").strip()
         
         video = Video.query.filter(Video.id == data["video_id"], Video.brand == auth_brand).first()
         if not video:
@@ -450,6 +474,8 @@ def create_app() -> Flask:
             return jsonify({"error": f"Categoría '{category_id}' no permitida para la marca {brand}"}), 400
 
         try:
+            _set_ai_request_status(request_id, status="starting", model=None, phase="queued")
+
             from services.ai_service import AIService
             ai_svc = AIService()
             
@@ -459,20 +485,51 @@ def create_app() -> Flask:
             if not os.path.exists(real_path):
                 return jsonify({"error": "El archivo de video físico no existe."}), 404
             
-            result = ai_svc.generate_metadata(real_path, brand, category_id)
+            result = ai_svc.generate_metadata(
+                real_path,
+                brand,
+                category_id,
+                progress_callback=lambda model_name, phase: _set_ai_request_status(
+                    request_id,
+                    status="processing",
+                    model=model_name,
+                    phase=phase,
+                ),
+            )
             video.ai_title = result.get("titulo", "")
             video.ai_description = result.get("descripcion", "")
-            video.ai_hashtags = json.dumps(result.get("hashtags", []))
+
+            ai_title_clean = str(video.ai_title or "").strip()
+            if ai_title_clean:
+                current_ext = os.path.splitext(str(video.filename or ""))[1].strip()
+                video.original_name = f"{ai_title_clean}{current_ext}" if current_ext else ai_title_clean
+
             resolved_category = str(result.get("category_id") or category_id or "").strip()
             if resolved_category and resolved_category not in allowed_categories:
                 resolved_category = brand_categories[0] if brand_categories else ""
+
+            if not resolved_category:
+                resolved_category = brand_categories[0] if brand_categories else ""
+
+            fixed_hashtags = hashtag_svc.get_hashtags(
+                resolved_category,
+                "tiktok",
+                brand=brand,
+            )
 
             video.brand = brand
             video.category_id = resolved_category or None
             db.session.commit()
             payload = dict(result)
+            payload["hashtags"] = fixed_hashtags
             payload["brand"] = video.brand
             payload["category_id"] = video.category_id
+            _set_ai_request_status(
+                request_id,
+                status="completed",
+                model=result.get("model_used"),
+                phase="done",
+            )
             return jsonify(payload)
             
         except Exception as e:
@@ -492,8 +549,25 @@ def create_app() -> Flask:
                 payload = {"error": err}
                 if retry_after is not None:
                     payload["retry_after"] = retry_after
+                _set_ai_request_status(request_id, status="failed", model=None, phase="quota", error=err)
                 return jsonify(payload), 429
+            _set_ai_request_status(request_id, status="failed", model=None, phase="error", error=err)
             return jsonify({"error": err}), 500
+
+    @app.route("/api/ai/status/<request_id>", methods=["GET"])
+    def ai_status(request_id: str):
+        auth_brand = _auth_brand()
+        if not auth_brand:
+            return jsonify({"error": "No autenticado"}), 401
+
+        request_id = str(request_id or "").strip()
+        with AI_REQUEST_STATUS_LOCK:
+            payload = dict(AI_REQUEST_STATUS.get(request_id, {}))
+
+        if not payload:
+            return jsonify({"status": "unknown", "model": None, "phase": None}), 404
+
+        return jsonify(payload)
 
     # ── Posts ─────────────────────────────────────────────────
 
@@ -572,17 +646,8 @@ def create_app() -> Flask:
         title        = data["title"].strip()
         description  = data.get("description", "").strip()
         content_type = data["content_type"]
-        custom_tags  = data.get("custom_hashtags") or data.get("hashtags") or []
         auto_time    = data.get("auto_time", True)
         manual_dt    = data.get("scheduled_at")        # "2025-12-25T10:00"
-
-        if not custom_tags and video.ai_hashtags:
-            try:
-                parsed_tags = json.loads(video.ai_hashtags)
-                if isinstance(parsed_tags, list):
-                    custom_tags = parsed_tags
-            except Exception:
-                pass
 
         if brand not in config.BRANDS:
             return jsonify({"error": f"Marca inválida: {brand}"}), 400
@@ -604,7 +669,7 @@ def create_app() -> Flask:
 
         for platform in platforms:
             # Hashtags
-            hashtags = hashtag_svc.get_hashtags(content_type, platform, custom_tags, brand=brand)
+            hashtags = hashtag_svc.get_hashtags(content_type, platform, brand=brand)
 
             # Horario – ahora usa content_type para el cálculo
             if auto_time:
@@ -612,7 +677,7 @@ def create_app() -> Flask:
             else:
                 if not manual_dt:
                     return jsonify({"error": "scheduled_at requerido cuando auto_time=false"}), 400
-                scheduled_at = datetime.fromisoformat(manual_dt).replace(tzinfo=COL_TZ)
+                scheduled_at = datetime.fromisoformat(manual_dt).replace(tzinfo=_brand_timezone(brand))
 
             post = Post(
                 video_id     = video.id,
@@ -655,7 +720,7 @@ def create_app() -> Flask:
 
     @app.route("/api/posts/<int:post_id>/regenerate", methods=["POST"])
     def regenerate_post(post_id):
-        """Regenera el título, descripción y hashtags de un post usando IA.
+        """Regenera título y descripción con IA, y reaplica hashtags fijos.
         Acepta feedback opcional del usuario para mejorar el resultado."""
         auth_brand = _auth_brand()
         post = Post.query.filter(Post.id == post_id, Post.brand == auth_brand).first_or_404()
@@ -683,9 +748,10 @@ def create_app() -> Flask:
             post.title = result.get("titulo", post.title)
             post.description = result.get("descripcion", post.description)
 
-            new_hashtags_raw = result.get("hashtags", [])
             platform_hashtags = hashtag_svc.get_hashtags(
-                post.content_type, post.platform, new_hashtags_raw, brand=post.brand
+                post.content_type,
+                post.platform,
+                brand=post.brand,
             )
             post.hashtags = json.dumps(platform_hashtags)
 
@@ -709,12 +775,37 @@ def create_app() -> Flask:
         if post.status not in ("scheduled", "failed"):
             return jsonify({"error": f"No se puede publicar con estado: {post.status}"}), 400
         # Mover scheduled_at a ahora para que el scheduler lo tome
-        post.scheduled_at = datetime.now(COL_TZ).replace(tzinfo=None)
+        post.scheduled_at = datetime.now(_brand_timezone(post.brand)).replace(tzinfo=None)
         post.status       = "scheduled"
         db.session.commit()
         # Publicar directamente en este request (sin esperar al scheduler)
         scheduler_svc._publish_post(post)
         return jsonify(post.to_dict())
+
+    @app.route("/api/posts/<int:post_id>/download-video", methods=["GET"])
+    def download_post_video(post_id):
+        """Descarga el archivo original del video con nombre basado en título IA/post."""
+        auth_brand = _auth_brand()
+        post = Post.query.filter(Post.id == post_id, Post.brand == auth_brand).first_or_404()
+        video = Video.query.filter(Video.id == post.video_id, Video.brand == auth_brand).first()
+        if not video:
+            return jsonify({"error": "Video no encontrado"}), 404
+
+        real_path = os.path.abspath(video.file_path)
+        if not os.path.exists(real_path):
+            return jsonify({"error": "Archivo de video no encontrado"}), 404
+
+        base_title = (
+            str(post.title or "").strip()
+            or str(video.ai_title or "").strip()
+            or os.path.splitext(str(video.original_name or ""))[0].strip()
+            or f"video-{video.id}"
+        )
+        safe_title = secure_filename(base_title) or f"video-{video.id}"
+        extension = os.path.splitext(str(video.filename or video.original_name or ""))[1].strip().lower() or ".mp4"
+        download_name = f"{safe_title}{extension}"
+
+        return send_file(real_path, as_attachment=True, download_name=download_name)
 
     # ── Hashtags ──────────────────────────────────────────────
 
@@ -727,7 +818,7 @@ def create_app() -> Flask:
         allowed = set(config.BRAND_CATEGORIES.get(auth_brand, []))
         if content_type not in allowed:
             content_type = default_type
-        tags = hashtag_svc.get_hashtags(content_type, platform)
+        tags = hashtag_svc.get_hashtags(content_type, platform, brand=auth_brand)
         return jsonify({"hashtags": tags})
 
     @app.route("/api/hashtags/content-types", methods=["GET"])
@@ -752,7 +843,7 @@ def create_app() -> Flask:
         content_type = data.get("content_type", default_type)
         if content_type not in set(config.BRAND_CATEGORIES.get(auth_brand, [])):
             content_type = default_type
-        preview      = scheduler_svc.get_schedule_preview(platforms, content_type)
+        preview      = scheduler_svc.get_schedule_preview(platforms, content_type, brand=auth_brand)
         return jsonify(preview)
 
     # ── Status / Dashboard ────────────────────────────────────
