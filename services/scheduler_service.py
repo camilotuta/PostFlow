@@ -35,36 +35,48 @@ SCHEDULE_SLOTS = {
             4: ["20:00"],
             5: ["20:00", "22:00"],
         },
+        "youtube_shorts": {
+            1: ["20:00"],
+            3: ["19:30", "23:00"],
+            4: ["20:00"],
+            5: ["20:00", "22:00"],
+        },
     },
     "acc_gimnasio": {
         "tiktok": {1: ["20:00"], 3: ["20:00"]},
         "instagram": {1: ["12:00", "19:00"], 3: ["12:00", "19:00"]},
         "facebook": {1: ["12:00", "19:00"], 3: ["12:00", "19:00"]},
+        "youtube_shorts": {1: ["12:00"], 4: ["12:00"]},
     },
     "pilates_yoga": {
         "tiktok": {2: ["19:30"], 5: ["19:30"]},
         "instagram": {2: ["11:00", "19:00"], 5: ["11:00", "19:00"]},
         "facebook": {2: ["09:00", "19:00"], 5: ["09:00", "19:00"]},
+        "youtube_shorts": {5: ["09:00", "10:00"]},
     },
     "sup_naturales": {
         "tiktok": {1: ["20:00"], 2: ["20:00"]},
         "instagram": {1: ["11:00", "19:00"], 2: ["11:00", "19:00"]},
         "facebook": {1: ["09:00", "19:00"], 2: ["09:00", "19:00"]},
+        "youtube_shorts": {1: ["09:00"], 2: ["09:00"]},
     },
     "ropa_deportiva": {
         "tiktok": {1: ["20:00"], 3: ["20:00"]},
         "instagram": {1: ["12:00", "19:00"], 3: ["12:00", "19:00"]},
         "facebook": {1: ["12:00", "19:00"], 3: ["12:00", "19:00"]},
+        "youtube_shorts": {1: ["12:00"], 4: ["12:00"]},
     },
     "sup_deportivos": {
         "tiktok": {1: ["20:00"], 2: ["20:00"]},
         "instagram": {1: ["11:00", "19:00"], 2: ["11:00", "19:00"]},
         "facebook": {1: ["09:00", "19:00"], 2: ["09:00", "19:00"]},
+        "youtube_shorts": {1: ["09:00"], 2: ["09:00"]},
     },
     "home_gym": {
         "tiktok": {3: ["19:30"], 4: ["19:30"]},
         "instagram": {3: ["12:00", "19:30"], 4: ["12:00", "19:30"]},
         "facebook": {3: ["12:00", "19:00"], 4: ["12:00", "19:00"]},
+        "youtube_shorts": {2: ["19:30"], 4: ["19:30"]},
     },
     "milita_beauty": {
         "tiktok": {
@@ -76,6 +88,26 @@ SCHEDULE_SLOTS = {
         },
     },
 }
+
+
+DAILY_PLATFORM_LIMITS = {
+    "tatuct": {"tiktok": 2, "youtube_shorts": 2},
+    "milita": {"tiktok": 2},
+    "gymark": {
+        "tiktok": 2,
+        "instagram": 1,
+        "facebook": 1,
+        "youtube_shorts": 1,
+    },
+}
+
+DAILY_TOTAL_LIMITS = {
+    "tatuct": 3,
+    "milita": 2,
+    "gymark": 5,
+}
+
+ACTIVE_POST_STATES = ["scheduled", "posting", "published"]
 
 
 def _brand_timezone(brand: str) -> ZoneInfo:
@@ -103,9 +135,9 @@ def _parse_time_slot(slot) -> tuple[int, int]:
 class SchedulerService:
 
     def __init__(self, app=None):
-        self.app       = app
+        self.app = app
         self._scheduler = BackgroundScheduler(timezone=TIMEZONE)
-        self._started   = False
+        self._started = False
 
     # ─────────────────────────────────────
     #  Iniciar
@@ -138,6 +170,9 @@ class SchedulerService:
         after: datetime | None = None,
         content_type: str = "acc_gimnasio",
         brand: str = "gymark",
+        extra_brand_day_counts: dict[str, int] | None = None,
+        extra_platform_day_counts: dict[str, int] | None = None,
+        search_days: int = 120,
     ) -> datetime:
         """
         Devuelve el próximo slot óptimo para la plataforma y categoría dada.
@@ -155,9 +190,9 @@ class SchedulerService:
         table = cat_times.get(platform, cat_times.get("tiktok", {}))
 
         # Intentar en los próximos días, respetando SOLO los días configurados
-        for days_ahead in range(15):
+        for days_ahead in range(max(1, int(search_days))):
             candidate_date = now.date() + timedelta(days=days_ahead)
-            weekday        = candidate_date.weekday()  # 0=lunes
+            weekday = candidate_date.weekday()  # 0=lunes
             hours = table.get(weekday, [])
 
             if not hours:
@@ -176,26 +211,91 @@ class SchedulerService:
                 )
                 # Mínimo 5 minutos en el futuro
                 if candidate > now + timedelta(minutes=5):
+                    day_key = candidate.date().isoformat()
+                    platform_day_key = f"{day_key}:{platform}"
+                    allowed, _ = self.check_daily_limits(
+                        brand=brand,
+                        platform=platform,
+                        scheduled_at=candidate,
+                        extra_brand_day=(extra_brand_day_counts or {}).get(day_key, 0),
+                        extra_platform_day=(extra_platform_day_counts or {}).get(
+                            platform_day_key, 0
+                        ),
+                    )
+                    if not allowed:
+                        continue
+
                     start_of_slot = candidate.replace(tzinfo=None)
                     end_of_slot = start_of_slot + timedelta(minutes=1)
-                    
+
                     posts_in_slot = Post.query.filter(
                         Post.platform == platform,
                         Post.brand == brand,
-                        Post.status.in_(["scheduled", "posting"]),
+                        Post.status.in_(ACTIVE_POST_STATES),
                         Post.scheduled_at >= start_of_slot,
                         Post.scheduled_at < end_of_slot,
                     ).count()
-                    
+
                     if posts_in_slot < 2:
                         return candidate
 
-        # Fallback de seguridad: mañana a las 10 am
-        tomorrow = now + timedelta(days=1)
-        return datetime(
-            tomorrow.year, tomorrow.month, tomorrow.day,
-            10, 0, 0, tzinfo=brand_tz,
+        raise ValueError(
+            f"No hay horarios disponibles para {platform} en {brand} dentro de {search_days} días."
         )
+
+    def check_daily_limits(
+        self,
+        *,
+        brand: str,
+        platform: str,
+        scheduled_at: datetime,
+        extra_brand_day: int = 0,
+        extra_platform_day: int = 0,
+    ) -> tuple[bool, str | None]:
+        """Valida límites diarios por marca y por plataforma para una fecha dada."""
+        brand_tz = _brand_timezone(brand)
+        if scheduled_at.tzinfo is None:
+            local_dt = scheduled_at.replace(tzinfo=brand_tz)
+        else:
+            local_dt = scheduled_at.astimezone(brand_tz)
+
+        day_start_tz = local_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end_tz = day_start_tz + timedelta(days=1)
+        day_start = day_start_tz.replace(tzinfo=None)
+        day_end = day_end_tz.replace(tzinfo=None)
+
+        brand_day_count = Post.query.filter(
+            Post.brand == brand,
+            Post.status.in_(ACTIVE_POST_STATES),
+            Post.scheduled_at >= day_start,
+            Post.scheduled_at < day_end,
+        ).count()
+
+        brand_day_limit = DAILY_TOTAL_LIMITS.get(brand)
+        if brand_day_limit is not None and (brand_day_count + extra_brand_day) >= int(
+            brand_day_limit
+        ):
+            return False, (
+                f"Límite diario alcanzado para {brand}: máximo {brand_day_limit} posts/día"
+            )
+
+        platform_day_count = Post.query.filter(
+            Post.brand == brand,
+            Post.platform == platform,
+            Post.status.in_(ACTIVE_POST_STATES),
+            Post.scheduled_at >= day_start,
+            Post.scheduled_at < day_end,
+        ).count()
+
+        platform_day_limit = DAILY_PLATFORM_LIMITS.get(brand, {}).get(platform)
+        if platform_day_limit is not None and (
+            platform_day_count + extra_platform_day
+        ) >= int(platform_day_limit):
+            return False, (
+                f"Límite diario alcanzado para {brand} en {platform}: máximo {platform_day_limit}/día"
+            )
+
+        return True, None
 
     def get_schedule_preview(
         self,
@@ -212,7 +312,9 @@ class SchedulerService:
             slots = []
             after = None
             for _ in range(3):
-                slot  = self.get_next_best_time(platform, after, content_type, brand=brand)
+                slot = self.get_next_best_time(
+                    platform, after, content_type, brand=brand
+                )
                 slots.append(slot.strftime("%A %d %b · %H:%M"))
                 after = slot + timedelta(minutes=10)
             preview[platform] = slots
@@ -238,37 +340,52 @@ class SchedulerService:
 
     def _publish_post(self, post: Post):
         """Publica un post individual y actualiza su estado."""
-        video     = post.video
-        video_path = video.file_path
-        hashtags   = post.hashtags_list()
+        video = post.video
+        video_path = (
+            video.get_publish_path()
+            if hasattr(video, "get_publish_path")
+            else video.file_path
+        )
+        hashtags = post.hashtags_list()
 
         brand = getattr(post, "brand", "gymark") or "gymark"
         try:
             post.status = "posting"
             db.session.commit()
 
-            result = self._simulate_publish(post=post, video_path=video_path, hashtags=hashtags)
+            result = self._simulate_publish(
+                post=post, video_path=video_path, hashtags=hashtags
+            )
 
             if result.get("success"):
-                post.status           = "published"
-                post.posted_at        = datetime.now(COL_TZ).replace(tzinfo=None)
-                post.platform_post_id = str(result.get("publish_id") or result.get("post_id") or result.get("video_id", ""))
+                post.status = "published"
+                post.posted_at = datetime.now(COL_TZ).replace(tzinfo=None)
+                post.platform_post_id = str(
+                    result.get("publish_id")
+                    or result.get("post_id")
+                    or result.get("video_id", "")
+                )
                 logger.info(f"[Scheduler] Post {post.id} publicado en {post.platform}")
             else:
-                post.status        = "failed"
+                post.status = "failed"
                 post.error_message = json.dumps(result.get("error", "unknown"))
                 logger.error(f"[Scheduler] Post {post.id} FALLÓ: {post.error_message}")
 
         except Exception as exc:
-            post.status        = "failed"
+            post.status = "failed"
             post.error_message = str(exc)
             logger.exception(f"[Scheduler] Excepción publicando post {post.id}")
         finally:
             db.session.commit()
 
-    def _simulate_publish(self, post: Post, video_path: str, hashtags: list[str]) -> dict:
-        if post.platform not in {"tiktok", "instagram", "facebook"}:
-            return {"success": False, "error": f"Plataforma desconocida: {post.platform}"}
+    def _simulate_publish(
+        self, post: Post, video_path: str, hashtags: list[str]
+    ) -> dict:
+        if post.platform not in {"tiktok", "instagram", "facebook", "youtube_shorts"}:
+            return {
+                "success": False,
+                "error": f"Plataforma desconocida: {post.platform}",
+            }
 
         publish_id = f"demo-{post.platform}-{post.id}"
         logger.info(

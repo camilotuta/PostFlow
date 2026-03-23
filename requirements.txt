@@ -10,3 +10,4 @@ moviepy==1.0.3
 pytz==2024.1
 sqlalchemy==2.0.31
 google-generativeai
+gunicorn==21.2.0

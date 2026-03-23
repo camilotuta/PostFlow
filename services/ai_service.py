@@ -2,10 +2,13 @@ import os
 import json
 import logging
 import re
+import time
+
 import google.generativeai as genai
 import config
 
 logger = logging.getLogger(__name__)
+
 
 class AIService:
     def __init__(self):
@@ -24,7 +27,7 @@ class AIService:
         self.api_keys = list(getattr(config, "GEMINI_API_KEYS", []))
         self.generation_config = {
             "temperature": 0.85,
-            "response_mime_type": "application/json"
+            "response_mime_type": "application/json",
         }
 
     @staticmethod
@@ -36,7 +39,9 @@ class AIService:
         }
         return mapping.get(txt, txt.replace("models/", "").replace("-", " ").title())
 
-    def _build_prompt(self, context: str, strict_audio: bool = True, category_detection: bool = False) -> str:
+    def _build_prompt(
+        self, context: str, strict_audio: bool = True, category_detection: bool = False
+    ) -> str:
         extra_audio_rules = ""
         if strict_audio:
             extra_audio_rules = """
@@ -137,10 +142,12 @@ class AIService:
         if not text:
             return text
         for pattern, _ in self._PROFANITY_PATTERNS:
+
             def _replacer(m: re.Match) -> str:
                 matched = m.group(0)
                 # Preserve original casing of first/last char
                 return self._censor_word(matched)
+
             text = re.sub(
                 r"(?<![\w#])" + pattern + r"(?![\w])",
                 _replacer,
@@ -256,7 +263,12 @@ class AIService:
             low_desc = desc.lower()
             low_phrase = phrase_short.lower()
 
-            if low_phrase and low_phrase not in low_title and low_phrase not in low_desc and len(title) < 10:
+            if (
+                low_phrase
+                and low_phrase not in low_title
+                and low_phrase not in low_desc
+                and len(title) < 10
+            ):
                 title = phrase_short
 
             generic_title_tokens = {
@@ -276,7 +288,9 @@ class AIService:
 
         # Apply Spanish punctuation fix AFTER all text transforms
         result["titulo"] = self._fix_spanish_punctuation(self._smart_trim(title, 90))
-        result["descripcion"] = self._ensure_complete_description(self._smart_trim(desc, 280))
+        result["descripcion"] = self._ensure_complete_description(
+            self._smart_trim(desc, 280)
+        )
         return result
 
     def _looks_generic_or_audio_missing(self, result: dict) -> bool:
@@ -308,25 +322,90 @@ class AIService:
         txt = str(value or "").strip().lower()
         return txt if txt in self.gymark_categories else ""
 
+    def _upload_video_file(self, video_path: str):
+        video_file = genai.upload_file(path=video_path)
+        logger.info(f"Video subido con éxito a Gemini: URI={video_file.uri}")
+
+        while video_file.state.name == "PROCESSING":
+            logger.info("Esperando que Gemini procese el video...")
+            time.sleep(3)
+            video_file = genai.get_file(video_file.name)
+
+        if video_file.state.name == "FAILED":
+            raise ValueError("El archivo subido a Gemini falló en su procesamiento.")
+
+        return video_file
+
     def _infer_gymark_category_from_text(self, result: dict) -> str:
         ai_category = self._coerce_gymark_category(result.get("category_id", ""))
         if ai_category:
             return ai_category
 
-        text = " ".join([
-            str(result.get("titulo", "")),
-            str(result.get("descripcion", "")),
-            str(result.get("audio_clave", "")),
-            str(result.get("visual_clave", "")),
-        ]).lower()
+        text = " ".join(
+            [
+                str(result.get("titulo", "")),
+                str(result.get("descripcion", "")),
+                str(result.get("audio_clave", "")),
+                str(result.get("visual_clave", "")),
+            ]
+        ).lower()
 
         keyword_map = {
-            "pilates_yoga": ["pilates", "yoga", "mat", "colchoneta", "namaste", "stretch", "movilidad"],
-            "ropa_deportiva": ["legging", "licra", "short", "camiseta", "sudadera", "outfit", "ropa"],
-            "sup_naturales": ["natural", "herbal", "organico", "orgánico", "vitamina", "detox", "inmunidad"],
-            "sup_deportivos": ["proteina", "proteína", "creatina", "preworkout", "amino", "whey", "suplement"],
-            "home_gym": ["home gym", "casa", "entrenar en casa", "mancuerna", "rack", "banca", "setup"],
-            "acc_gimnasio": ["accesorio", "gimnasio", "guantes", "rodillera", "strap", "banda", "cinturon", "cinturón"],
+            "pilates_yoga": [
+                "pilates",
+                "yoga",
+                "mat",
+                "colchoneta",
+                "namaste",
+                "stretch",
+                "movilidad",
+            ],
+            "ropa_deportiva": [
+                "legging",
+                "licra",
+                "short",
+                "camiseta",
+                "sudadera",
+                "outfit",
+                "ropa",
+            ],
+            "sup_naturales": [
+                "natural",
+                "herbal",
+                "organico",
+                "orgánico",
+                "vitamina",
+                "detox",
+                "inmunidad",
+            ],
+            "sup_deportivos": [
+                "proteina",
+                "proteína",
+                "creatina",
+                "preworkout",
+                "amino",
+                "whey",
+                "suplement",
+            ],
+            "home_gym": [
+                "home gym",
+                "casa",
+                "entrenar en casa",
+                "mancuerna",
+                "rack",
+                "banca",
+                "setup",
+            ],
+            "acc_gimnasio": [
+                "accesorio",
+                "gimnasio",
+                "guantes",
+                "rodillera",
+                "strap",
+                "banda",
+                "cinturon",
+                "cinturón",
+            ],
         }
 
         scores = {key: 0 for key in self.gymark_categories}
@@ -339,7 +418,7 @@ class AIService:
         if scores[best_category] > 0:
             return best_category
         return "acc_gimnasio"
-    
+
     def generate_metadata(
         self,
         video_path: str,
@@ -357,8 +436,7 @@ class AIService:
         """
         try:
             logger.info(f"Subiendo video a Gemini IA: {video_path}")
-            
-            import time
+
             max_retries_per_key_model = 2
             last_error = None
 
@@ -366,7 +444,9 @@ class AIService:
                 raise ValueError("No hay API keys de Gemini configuradas.")
 
             for model_name in self.model_names:
-                logger.info(f"Intentando generación con modelo (prioridad): {model_name}")
+                logger.info(
+                    f"Intentando generación con modelo (prioridad): {model_name}"
+                )
                 friendly_model = self._friendly_model_name(model_name)
                 if callable(progress_callback):
                     try:
@@ -380,46 +460,46 @@ class AIService:
                         model_name=model_name,
                         generation_config=self.generation_config,
                     )
-                    logger.info(f"Usando key {key_index}/{len(self.api_keys)} con modelo {model_name}")
+                    logger.info(
+                        f"Usando key {key_index}/{len(self.api_keys)} con modelo {model_name}"
+                    )
 
                     for attempt in range(max_retries_per_key_model):
                         video_file = None
                         try:
                             if callable(progress_callback):
                                 try:
-                                    progress_callback(model_name=friendly_model, phase="uploading")
+                                    progress_callback(
+                                        model_name=friendly_model, phase="uploading"
+                                    )
                                 except Exception:
                                     pass
-                            video_file = genai.upload_file(path=video_path)
-                            logger.info(f"Video subido con éxito: URI={video_file.uri}")
-
-                            while video_file.state.name == "PROCESSING":
-                                logger.info("Esperando que Gemini procese el video...")
-                                if callable(progress_callback):
-                                    try:
-                                        progress_callback(model_name=friendly_model, phase="processing_video")
-                                    except Exception:
-                                        pass
-                                time.sleep(3)
-                                video_file = genai.get_file(video_file.name)
-
-                            if video_file.state.name == "FAILED":
-                                raise ValueError("El archivo subido a Gemini falló en su procesamiento.")
+                            video_file = self._upload_video_file(video_path)
+                            if callable(progress_callback):
+                                try:
+                                    progress_callback(
+                                        model_name=friendly_model,
+                                        phase="processing_video",
+                                    )
+                                except Exception:
+                                    pass
 
                             context = (
                                 "Marca de la cuenta: Gaming / Clips de stream (Tatuct)."
                                 if brand == "tatuct"
-                                else "Marca de la cuenta: Gimnasio / Ropa deportiva (Gymark)."
-                                if brand == "gymark"
                                 else (
-                                    "Cuenta personal de contenido femenino en México (@milita). "
-                                    "Nicho combinado: maquillaje (tutoriales GRWM, looks diarios, transformaciones), "
-                                    "fitness (rutinas, motivación, workouts), cuidado personal (skincare, hábitos), "
-                                    "amor propio (self-love, mindset, empoderamiento) y tips de belleza (hacks, "
-                                    "productos, técnicas). "
-                                    "Audiencia objetivo: mujeres 18-34 años en México. "
-                                    "Tono: cercano, empoderador, motivacional, femenino y auténtico. "
-                                    "Plataforma única: TikTok México."
+                                    "Marca de la cuenta: Gimnasio / Ropa deportiva (Gymark)."
+                                    if brand == "gymark"
+                                    else (
+                                        "Cuenta personal de contenido femenino en México (@milita). "
+                                        "Nicho combinado: maquillaje (tutoriales GRWM, looks diarios, transformaciones), "
+                                        "fitness (rutinas, motivación, workouts), cuidado personal (skincare, hábitos), "
+                                        "amor propio (self-love, mindset, empoderamiento) y tips de belleza (hacks, "
+                                        "productos, técnicas). "
+                                        "Audiencia objetivo: mujeres 18-34 años en México. "
+                                        "Tono: cercano, empoderador, motivacional, femenino y auténtico. "
+                                        "Plataforma única: TikTok México."
+                                    )
                                 )
                             )
                             if category_id:
@@ -427,17 +507,24 @@ class AIService:
                             if extra_context:
                                 context += f"\n{extra_context}"
 
-                            should_detect_category = (brand == "gymark" and not self._coerce_gymark_category(category_id))
+                            should_detect_category = (
+                                brand == "gymark"
+                                and not self._coerce_gymark_category(category_id)
+                            )
                             prompt = self._build_prompt(
                                 context,
                                 strict_audio=True,
                                 category_detection=should_detect_category,
                             )
 
-                            logger.info(f"Generando contenido con {model_name} (key {key_index})...")
+                            logger.info(
+                                f"Generando contenido con {model_name} (key {key_index})..."
+                            )
                             if callable(progress_callback):
                                 try:
-                                    progress_callback(model_name=friendly_model, phase="generating")
+                                    progress_callback(
+                                        model_name=friendly_model, phase="generating"
+                                    )
                                 except Exception:
                                     pass
                             response = model.generate_content([video_file, prompt])
@@ -456,7 +543,9 @@ class AIService:
                                 parsed_result["category_id"] = "milita_beauty"
 
                             if self._looks_generic_or_audio_missing(parsed_result):
-                                last_error = ValueError("Respuesta genérica o sin señal de audio")
+                                last_error = ValueError(
+                                    "Respuesta genérica o sin señal de audio"
+                                )
                                 logger.warning(
                                     f"Respuesta genérica/sin audio con {model_name} key {key_index}. Reintentando..."
                                 )
@@ -468,8 +557,15 @@ class AIService:
                         except Exception as e:
                             last_error = e
                             err = str(e).lower()
-                            is_quota = "429" in err or "quota" in err or "exhausted" in err
-                            is_retryable = is_quota or "timeout" in err or "503" in err or "500" in err
+                            is_quota = (
+                                "429" in err or "quota" in err or "exhausted" in err
+                            )
+                            is_retryable = (
+                                is_quota
+                                or "timeout" in err
+                                or "503" in err
+                                or "500" in err
+                            )
 
                             if is_quota:
                                 logger.warning(
@@ -484,20 +580,27 @@ class AIService:
                                 time.sleep(3)
                                 continue
 
-                            logger.warning(f"Fallo con {model_name} key {key_index}: {e}")
+                            logger.warning(
+                                f"Fallo con {model_name} key {key_index}: {e}"
+                            )
                             break
                         finally:
                             if video_file is not None:
                                 try:
                                     genai.delete_file(video_file.name)
-                                    logger.info("Video eliminado de Gemini para liberar cuota.")
+                                    logger.info(
+                                        "Video eliminado de Gemini para liberar cuota."
+                                    )
                                 except Exception as cleanup_error:
-                                    logger.error(f"Failed to delete video: {cleanup_error}")
+                                    logger.error(
+                                        f"Failed to delete video: {cleanup_error}"
+                                    )
 
             if last_error:
                 raise last_error
-            raise ValueError("No se pudo obtener un resultado de IA válido con enfoque en audio.")
-
+            raise ValueError(
+                "No se pudo obtener un resultado de IA válido con enfoque en audio."
+            )
 
         except Exception as e:
             logger.error(f"Error generando metadatos con IA: {e}")

@@ -278,6 +278,7 @@ a:hover { text-decoration: underline; }
 .pb-bar-fill.tiktok    { background: var(--tiktok); }
 .pb-bar-fill.instagram { background: var(--instagram); }
 .pb-bar-fill.facebook  { background: var(--facebook); }
+.pb-bar-fill.youtube   { background: var(--red); }
 
 .posts-mini-list { display: flex; flex-direction: column; gap: 8px; }
 .posts-mini-item {
@@ -815,6 +816,7 @@ a:hover { text-decoration: underline; }
 .tiktok-color   { color: var(--tiktok); }
 .insta-color    { color: var(--instagram); }
 .fb-color       { color: var(--facebook); }
+.yt-color       { color: var(--red); }
 .btp-times { font-size: 12px; color: var(--text2); }
 .best-times-note { font-size: 11px; color: var(--text3); margin-top: 12px; line-height: 1.5; }
 
@@ -898,6 +900,7 @@ a:hover { text-decoration: underline; }
 .plat-dot.tiktok    { background: var(--tiktok); }
 .plat-dot.instagram { background: var(--instagram); }
 .plat-dot.facebook  { background: var(--facebook); }
+.plat-dot.youtube_shorts { background: var(--red); }
 
 /* ═══════════════════════════════════════════════════════════
    CONFIG CARDS
@@ -1118,6 +1121,175 @@ a:hover { text-decoration: underline; }
 }
 
 /* ═══════════════════════════════════════════════════════════
+   CUSTOMIZE TAB
+═══════════════════════════════════════════════════════════ */
+.customize-layout {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.customize-sidebar-card,
+.customize-form-card {
+  min-height: 100%;
+}
+
+.customize-video-meta {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.customize-meta-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.customize-meta-text {
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 10px;
+}
+
+.customize-preview-wrap {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.customize-preview {
+  width: 100%;
+  max-height: 360px;
+  background: #000;
+}
+
+.customize-preview-placeholder {
+  width: 100%;
+}
+
+.customize-option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.customize-toggle-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.customize-toggle-card input {
+  margin-top: 2px;
+}
+
+.customize-toggle-card strong {
+  display: block;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.customize-toggle-card small {
+  color: var(--text2);
+  line-height: 1.45;
+}
+
+.customize-current-file {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.brand-assets-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.brand-asset-item {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.brand-asset-header {
+  margin-bottom: 8px;
+  color: white;
+}
+
+.brand-asset-status {
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 12px;
+  min-height: 18px;
+}
+
+.brand-asset-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.brand-asset-upload-label {
+  cursor: pointer;
+}
+
+.customize-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.customize-apply-all {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+}
+
+.customize-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.video-card__customize-badges {
+  margin-top: 8px;
+}
+
+.customize-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(37,99,235,.14);
+  border: 1px solid rgba(37,99,235,.26);
+  color: #c7d8ff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.customize-badge--muted {
+  background: rgba(255,255,255,.03);
+  border-color: var(--border);
+  color: var(--text3);
+}
+
+/* ═══════════════════════════════════════════════════════════
    HELPERS
 ═══════════════════════════════════════════════════════════ */
 .hidden { display: none !important; }
@@ -1130,6 +1302,8 @@ a:hover { text-decoration: underline; }
   .config-grid { grid-template-columns: 1fr; }
   .schedule-layout { grid-template-columns: 1fr; }
   .dash-row { grid-template-columns: 1fr; }
+  .customize-layout { grid-template-columns: 1fr; }
+  .brand-assets-row { grid-template-columns: 1fr; }
 }
 @media (max-width: 768px) {
   html, body {

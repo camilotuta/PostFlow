@@ -10,41 +10,50 @@ let videos = [];
 let currentBrand = "gymark";
 let brandsData = []; // [{key, label, color, platforms, categories}]
 let uploadBrand = "gymark"; // marca activa en el tab de subir
+let brandAssets = null;
 
 const PERFECT_WINDOWS = {
   gaming: {
     tiktok:
       "TikTok · COT · Mar 20:00 · Mié 21:00 · Jue 19:30 / 23:00 · Vie 20:00 · Sáb 20:00 / 22:00",
+    youtube_shorts:
+      "YouTube Shorts · COT · Mar 20:00 · Jue 19:30 / 23:00 · Vie 20:00 · Sáb 20:00 / 22:00",
   },
   acc_gimnasio: {
     tiktok: "TikTok · COT · Mar / Jue 20:00",
     instagram: "Instagram · COT · Mar / Jue 12:00 y 19:00",
     facebook: "Facebook · COT · Mar / Jue 12:00 y 19:00",
+    youtube_shorts: "YouTube Shorts · COT · Mar / Vie 12:00",
   },
   pilates_yoga: {
     tiktok: "TikTok · COT · Mié / Sáb 19:30",
     instagram: "Instagram · COT · Mié / Sáb 11:00 y 19:00",
     facebook: "Facebook · COT · Mié / Sáb 09:00 y 19:00",
+    youtube_shorts: "YouTube Shorts · COT · Sáb 09:00 y 10:00",
   },
   sup_naturales: {
     tiktok: "TikTok · COT · Mar / Mié 20:00",
     instagram: "Instagram · COT · Mar / Mié 11:00 y 19:00",
     facebook: "Facebook · COT · Mar / Mié 09:00 y 19:00",
+    youtube_shorts: "YouTube Shorts · COT · Mar / Mié 09:00",
   },
   ropa_deportiva: {
     tiktok: "TikTok · COT · Mar / Jue 20:00",
     instagram: "Instagram · COT · Mar / Jue 12:00 y 19:00",
     facebook: "Facebook · COT · Mar / Jue 12:00 y 19:00",
+    youtube_shorts: "YouTube Shorts · COT · Mar / Vie 12:00",
   },
   sup_deportivos: {
     tiktok: "TikTok · COT · Mar / Mié 20:00",
     instagram: "Instagram · COT · Mar / Mié 11:00 y 19:00",
     facebook: "Facebook · COT · Mar / Mié 09:00 y 19:00",
+    youtube_shorts: "YouTube Shorts · COT · Mar / Mié 09:00",
   },
   home_gym: {
     tiktok: "TikTok · COT · Jue / Vie 19:30",
     instagram: "Instagram · COT · Jue / Vie 12:00 y 19:30",
     facebook: "Facebook · COT · Jue / Vie 12:00 y 19:00",
+    youtube_shorts: "YouTube Shorts · COT · Mié / Vie 19:30",
   },
   milita_beauty: {
     tiktok:
@@ -60,6 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
   safeInit(initTabs, "initTabs");
   safeInit(initCalendar, "initCalendar");
   safeInit(initUpload, "initUpload");
+
   safeInit(initScheduleForm, "initScheduleForm");
   safeInit(initPostsFilter, "initPostsFilter");
   safeInit(loadDashboard, "loadDashboard");
@@ -106,6 +116,7 @@ function initTabs() {
   const titles = {
     dashboard: "Dashboard",
     upload: "Subir Video",
+
     calendar: "Calendario",
     schedule: "Programar",
     posts: "Mis Posts",
@@ -170,6 +181,7 @@ function renderPlatformBars(byPlatform, total) {
     { key: "tiktok", label: "TikTok", color: "tiktok" },
     { key: "instagram", label: "Instagram", color: "instagram" },
     { key: "facebook", label: "Facebook", color: "facebook" },
+    { key: "youtube_shorts", label: "YouTube Shorts", color: "youtube" },
   ];
   if (total === 0) {
     el.innerHTML = `<div class="empty-msg">Sin datos aún</div>`;
@@ -535,8 +547,15 @@ async function uploadAllFiles() {
 
       try {
         const aiStEl = document.querySelector(`#qi-${item.id} .qi-status`);
-        if (aiStEl) aiStEl.textContent = "Procesando con Gemini 2.5 Pro...";
-        progressLabel.textContent = `Procesando "${item.file.name}" con Gemini 2.5 Pro...`;
+        if (result?.metadata_stripped) {
+          if (aiStEl) aiStEl.textContent = "Metadatos eliminados ✅";
+          progressLabel.textContent = `Metadatos eliminados en "${item.file.name}" ✅`;
+          await sleep(500);
+        }
+        if (aiStEl)
+          aiStEl.textContent =
+            "Metadatos eliminados ✅ · Procesando con Gemini 2.5 Pro...";
+        progressLabel.textContent = `Metadatos eliminados ✅ · Procesando "${item.file.name}" con Gemini 2.5 Pro...`;
         aiResult = await generateAIWithRetry(
           {
             video_id: result.id,
@@ -546,19 +565,20 @@ async function uploadAllFiles() {
           ({ attempt, waitSeconds, model, phase, queued }) => {
             if (aiStEl) {
               if (queued && waitSeconds > 0) {
-                aiStEl.textContent = `IA en cola (${attempt}) · esperando ${waitSeconds}s`;
+                aiStEl.textContent = `Metadatos eliminados ✅ · IA en cola (${attempt}) · esperando ${waitSeconds}s`;
               } else if (model) {
-                aiStEl.textContent = `Procesando con ${model}...`;
+                aiStEl.textContent = `Metadatos eliminados ✅ · Procesando con ${model}...`;
               } else if (phase === "queued") {
-                aiStEl.textContent = "Preparando IA...";
+                aiStEl.textContent =
+                  "Metadatos eliminados ✅ · Preparando IA...";
               }
             }
             if (queued && waitSeconds > 0) {
-              progressLabel.textContent = `Esperando IA para "${item.file.name}" · ${waitSeconds}s`;
+              progressLabel.textContent = `Metadatos eliminados ✅ · Esperando IA para "${item.file.name}" · ${waitSeconds}s`;
             } else if (model) {
-              progressLabel.textContent = `Procesando "${item.file.name}" con ${model}...`;
+              progressLabel.textContent = `Metadatos eliminados ✅ · Procesando "${item.file.name}" con ${model}...`;
             } else {
-              progressLabel.textContent = `Preparando IA para "${item.file.name}"...`;
+              progressLabel.textContent = `Metadatos eliminados ✅ · Preparando IA para "${item.file.name}"...`;
             }
           },
         );
@@ -872,6 +892,74 @@ async function changeVideoAccountAndRegenerateAI(videoId) {
   }
 }
 
+function renderBrandAssetState() {
+  const intro = brandAssets?.intro || { has_file: false, name: null };
+  const outro = brandAssets?.outro || { has_file: false, name: null };
+
+  const introStatus = document.getElementById("brandIntroStatus");
+  const outroStatus = document.getElementById("brandOutroStatus");
+  const btnDeleteIntro = document.getElementById("btnDeleteBrandIntro");
+  const btnDeleteOutro = document.getElementById("btnDeleteBrandOutro");
+
+  if (introStatus) {
+    introStatus.innerHTML = intro.has_file
+      ? `Actual: <strong>${intro.name}</strong>`
+      : "Sin intro configurada";
+  }
+  if (outroStatus) {
+    outroStatus.innerHTML = outro.has_file
+      ? `Actual: <strong>${outro.name}</strong>`
+      : "Sin outro configurada";
+  }
+
+  if (btnDeleteIntro) btnDeleteIntro.disabled = !intro.has_file;
+  if (btnDeleteOutro) btnDeleteOutro.disabled = !outro.has_file;
+}
+
+async function uploadBrandAsset(type, file) {
+  try {
+    const formData = new FormData();
+    formData.append(type === "intro" ? "intro_file" : "outro_file", file);
+
+    const response = await fetch(`${API}/api/brand/${type}`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) throw data;
+
+    if (!brandAssets) brandAssets = { intro: {}, outro: {} };
+    brandAssets[type] = data;
+    renderBrandAssetState();
+
+    toast(
+      `${type === "intro" ? "Intro" : "Outro"} guardada para toda la cuenta`,
+      "success",
+    );
+  } catch (error) {
+    toast(error?.error || `No se pudo subir la ${type}`, "error");
+  }
+}
+
+async function deleteBrandAsset(type) {
+  if (!confirm(`¿Eliminar la ${type} guardada para toda la cuenta?`)) return;
+  try {
+    const response = await fetch(`${API}/api/brand/${type}`, {
+      method: "DELETE",
+    });
+    const data = await response.json();
+    if (!response.ok) throw data;
+
+    if (!brandAssets) brandAssets = { intro: {}, outro: {} };
+    brandAssets[type] = data;
+    renderBrandAssetState();
+
+    toast(`${type === "intro" ? "Intro" : "Outro"} eliminada`, "success");
+  } catch (error) {
+    toast(error?.error || `No se pudo eliminar la ${type}`, "error");
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════
    SCHEDULE TAB
 ════════════════════════════════════════════════════════════ */
@@ -1010,7 +1098,7 @@ function renderBestTimesReference() {
   const brandMeta = brandsData.find((b) => b.key === currentBrand);
   const allowedPlatforms = brandMeta?.platforms?.length
     ? brandMeta.platforms
-    : ["tiktok", "instagram", "facebook"];
+    : ["tiktok", "instagram", "facebook", "youtube_shorts"];
 
   wrap.innerHTML = allowedPlatforms
     .filter((p) => categoryMap[p])
@@ -1022,7 +1110,9 @@ function renderBestTimesReference() {
             ? "insta-color"
             : p === "facebook"
               ? "fb-color"
-              : "tiktok-color"
+              : p === "youtube_shorts"
+                ? "yt-color"
+                : "tiktok-color"
         }">${platformLabel(p)}</div>
         <div class="btp-times">${categoryMap[p]}</div>
       </div>`,
@@ -1162,7 +1252,7 @@ function onVideoSelectChange() {
   const metaEl = document.getElementById("previewMeta");
 
   if (video) {
-    previewEl.src = `/static/uploads/${video.filename}`;
+    previewEl.src = video.video_url || video.source_video_url || "";
     previewEl.classList.remove("hidden");
     placeholder.classList.add("hidden");
     if (metaEl)
@@ -1552,7 +1642,12 @@ function formatBytes(bytes) {
 
 function platformLabel(p) {
   return (
-    { tiktok: "TikTok", instagram: "Instagram", facebook: "Facebook" }[p] || p
+    {
+      tiktok: "TikTok",
+      instagram: "Instagram",
+      facebook: "Facebook",
+      youtube_shorts: "YouTube Shorts",
+    }[p] || p
   );
 }
 
@@ -1992,7 +2087,7 @@ function openCalendarPostModal(post) {
   const video =
     allVideosCache.find((v) => v.id === post.video_id) ||
     videos.find((v) => v.id === post.video_id);
-  const videoSrc = video?.filename ? `/static/uploads/${video.filename}` : "";
+  const videoSrc = video?.video_url || video?.source_video_url || "";
   const downloadUrl = `/api/posts/${post.id}/download-video`;
   const hashtags = Array.isArray(post.hashtags) ? post.hashtags : [];
   const desc = post.description?.trim() || "Sin descripción";
@@ -2016,6 +2111,13 @@ function openCalendarPostModal(post) {
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
           Descargar video HQ
         </a>
+        <button
+          class="btn btn-primary btn-sm"
+          type="button"
+          onclick="copyPostCaption(${post.id})"
+        >
+          Copiar texto ${platformLabel(post.platform)}
+        </button>
       </div>
     </div>
     <div class="calendar-post-body">
@@ -2075,6 +2177,70 @@ function openCalendarPostModal(post) {
   `;
 
   overlay.classList.remove("hidden");
+}
+
+function normalizeHashtags(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((h) => String(h || "").trim())
+    .filter(Boolean)
+    .map((h) => (h.startsWith("#") ? h : `#${h.replace(/^#+/, "")}`));
+}
+
+function buildPlatformCaption(post) {
+  const base = String(post?.description || "").trim();
+  const tags = normalizeHashtags(post?.hashtags || []);
+  const hashtagsLine = tags.join(" ").trim();
+  const platform = String(post?.platform || "").toLowerCase();
+
+  if (!hashtagsLine) return base;
+
+  if (platform === "instagram") {
+    return `${base}\n.\n.\n.\n${hashtagsLine}`.trim();
+  }
+
+  if (platform === "facebook") {
+    return `${base}\n\n${hashtagsLine}`.trim();
+  }
+
+  return `${base}\n\n${hashtagsLine}`.trim();
+}
+
+async function copyTextToClipboard(text) {
+  const payload = String(text || "");
+  if (!payload.trim()) throw new Error("No hay contenido para copiar");
+
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(payload);
+    return;
+  }
+
+  const ta = document.createElement("textarea");
+  ta.value = payload;
+  ta.setAttribute("readonly", "true");
+  ta.style.position = "fixed";
+  ta.style.left = "-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  const ok = document.execCommand("copy");
+  document.body.removeChild(ta);
+  if (!ok) throw new Error("No se pudo copiar");
+}
+
+async function copyPostCaption(postId) {
+  const post = calendarPosts.find((p) => Number(p.id) === Number(postId));
+  if (!post) {
+    toast("No se encontró el post para copiar", "error");
+    return;
+  }
+
+  try {
+    const caption = buildPlatformCaption(post);
+    await copyTextToClipboard(caption);
+    toast(`Texto copiado para ${platformLabel(post.platform)}`, "success");
+  } catch (e) {
+    toast(e?.message || "No se pudo copiar el texto", "error");
+  }
 }
 
 async function regeneratePostContent(postId) {
