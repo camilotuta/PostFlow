@@ -59,6 +59,12 @@ const PERFECT_WINDOWS = {
     tiktok:
       "TikTok · CST México · Mar 09:00 / 13:00 · Mié 10:00 · Jue 19:30 · Vie 10:00 / 19:30 · Dom 10:00",
   },
+  escape_proctoring: {
+    tiktok:
+      "TikTok · EST · Mar 10:00 / 19:30 · Mié 11:00 / 20:00 · Jue 09:00 / 19:30 · Vie 12:00 / 20:00 · Sáb 10:00",
+    instagram:
+      "Instagram Reels · EST · Mar 11:00 / 19:30 · Mié 11:00 / 20:00 · Jue 11:00 / 19:30 · Vie 12:00 / 20:00 · Sáb 10:00",
+  },
 };
 
 /* ══════════════════════════════════════════════════════════════
@@ -589,7 +595,12 @@ async function uploadAllFiles() {
       } catch (e) {
         console.error("Error de IA:", e);
         try {
-          await del(`/api/videos/${result.id}`);
+          if (result && result.id) {
+            const videoId = parseInt(result.id, 10);
+            if (Number.isFinite(videoId)) {
+              await del(`/api/videos/${videoId}`);
+            }
+          }
         } catch (cleanupErr) {
           console.error("No se pudo limpiar video sin IA:", cleanupErr);
         }
@@ -829,10 +840,16 @@ async function deleteVideo(id) {
   )
     return;
   try {
-    await del(`/api/videos/${id}`);
+    // Ensure id is a number and not a string with unexpected format
+    const videoId = parseInt(id, 10);
+    if (!Number.isFinite(videoId)) {
+      throw new Error(`ID de video inválido: ${id}`);
+    }
+    await del(`/api/videos/${videoId}`);
     toast("Video eliminado", "info");
     await refreshAllData();
   } catch (e) {
+    console.error("Error al eliminar video:", e);
     toast("Error al eliminar", "error");
   }
 }
@@ -1142,12 +1159,26 @@ function filterPlatformsForBrand(brand) {
 function filterContentTypesForBrand(brand) {
   const sel = document.getElementById("contentTypeSelect");
   if (!sel) return;
+  const section = sel.closest(".form-section");
   [...sel.options].forEach((opt) => {
     opt.hidden = !brand.categories.includes(opt.value);
   });
   // select first visible option
   const firstVisible = [...sel.options].find((o) => !o.hidden);
   if (firstVisible) sel.value = firstVisible.value;
+
+  if (brand.key === "gymark") {
+    if (section) section.classList.add("hidden");
+    sel.disabled = true;
+    sel.title =
+      "En Gymark, la categoría se define automáticamente con IA por cada video.";
+  } else {
+    if (section) section.classList.remove("hidden");
+    sel.disabled = false;
+    if (sel.title?.includes("automáticamente con IA")) {
+      sel.title = "";
+    }
+  }
 }
 
 async function populateVideoSelect() {
@@ -1262,7 +1293,7 @@ function onVideoSelectChange() {
 
     // Auto-select AI-detected category for Gymark videos
     const ctSelect = document.getElementById("contentTypeSelect");
-    if (ctSelect && video.category_id) {
+    if (ctSelect && currentBrand === "gymark" && video.category_id) {
       const opt = [...ctSelect.options].find(
         (o) => o.value === video.category_id && !o.hidden,
       );
@@ -1349,11 +1380,29 @@ async function submitSchedule() {
     const video = videos.find((v) => v.id == videoId);
     if (!video) continue;
 
+    let contentTypeForVideo = contentType;
+    if (currentBrand === "gymark") {
+      contentTypeForVideo = String(video.category_id || "").trim();
+      if (!contentTypeForVideo) {
+        toast(
+          `El video ${getVideoDisplayName(video)} no tiene categoría IA. Analízalo con IA antes de programar.`,
+          "error",
+        );
+        continue;
+      }
+      if (ctSel) {
+        const opt = [...ctSel.options].find(
+          (o) => o.value === contentTypeForVideo && !o.hidden,
+        );
+        if (opt) ctSel.value = contentTypeForVideo;
+      }
+    }
+
     const payload = {
       video_id: parseInt(videoId),
       brand: currentBrand,
       platforms,
-      content_type: contentType,
+      content_type: contentTypeForVideo,
       title: getVideoDisplayName(video),
       description: video.ai_description || "",
       schedule_mode: scheduleMode,

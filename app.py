@@ -52,12 +52,24 @@ logger = logging.getLogger(__name__)
 COL_TZ = ZoneInfo(config.TIMEZONE)
 BRAND_TIMEZONES = {
     "milita": "America/Mexico_City",
+    "escape": "America/New_York",
 }
 
 
 def _brand_timezone(brand: str) -> ZoneInfo:
     tz_name = BRAND_TIMEZONES.get(str(brand or "").strip().lower(), config.TIMEZONE)
     return ZoneInfo(tz_name)
+
+
+def _default_content_type_for_brand(brand: str | None) -> str:
+    key = str(brand or "").strip().lower()
+    if key == "tatuct":
+        return "gaming"
+    if key == "milita":
+        return "milita_beauty"
+    if key == "escape":
+        return "escape_proctoring"
+    return "acc_gimnasio"
 
 
 VIDEO_PROCESSING_LOCK = threading.Lock()
@@ -555,10 +567,8 @@ def create_app() -> Flask:
         brand = _auth_brand() or "gymark"
         category_id = request.form.get("category_id", "")
 
-        if not category_id and brand == "tatuct":
-            category_id = "gaming"
-        if not category_id and brand == "milita":
-            category_id = "milita_beauty"
+        if not category_id:
+            category_id = _default_content_type_for_brand(brand)
         brand_categories = config.BRAND_CATEGORIES.get(brand, [])
         allowed_categories = set(brand_categories)
         if category_id and category_id not in allowed_categories:
@@ -600,14 +610,24 @@ def create_app() -> Flask:
 
     @app.route("/api/videos/<int:video_id>", methods=["DELETE"])
     def delete_video(video_id):
-        auth_brand = _auth_brand()
-        video = Video.query.filter(
-            Video.id == video_id, Video.brand == auth_brand
-        ).first_or_404()
-        _cleanup_video_assets(video)
-        db.session.delete(video)
-        db.session.commit()
-        return jsonify({"message": "Video eliminado"})
+        try:
+            auth_brand = _auth_brand()
+            if not auth_brand:
+                return jsonify({"error": "No autenticado"}), 401
+
+            video = Video.query.filter(
+                Video.id == video_id, Video.brand == auth_brand
+            ).first_or_404()
+
+            _cleanup_video_assets(video)
+            db.session.delete(video)
+            db.session.commit()
+            logger.info(f"Video {video_id} eliminado por brand {auth_brand}")
+            return jsonify({"message": "Video eliminado"})
+        except Exception as e:
+            logger.exception(f"Error eliminando video {video_id}: %s", str(e))
+            db.session.rollback()
+            return jsonify({"error": f"Error eliminando video: {str(e)}"}), 500
 
     # ── Brand Assets (intro / outro per account) ─────────────────
 
@@ -707,10 +727,8 @@ def create_app() -> Flask:
         brand_categories = config.BRAND_CATEGORIES.get(brand, [])
         allowed_categories = set(brand_categories)
 
-        if not category_id and brand == "tatuct":
-            category_id = "gaming"
-        if not category_id and brand == "milita":
-            category_id = "milita_beauty"
+        if not category_id:
+            category_id = _default_content_type_for_brand(brand)
         if category_id and category_id not in allowed_categories:
             return (
                 jsonify(
@@ -906,7 +924,7 @@ def create_app() -> Flask:
         data = request.get_json(force=True)
 
         # Validación
-        required = ["video_id", "platforms", "title", "content_type"]
+        required = ["video_id", "platforms", "title"]
         missing = [f for f in required if not data.get(f)]
         if missing:
             return jsonify({"error": f"Faltan campos: {', '.join(missing)}"}), 400
@@ -922,7 +940,7 @@ def create_app() -> Flask:
         platforms = data["platforms"]  # list
         title = data["title"].strip()
         description = data.get("description", "").strip()
-        content_type = data["content_type"]
+        content_type = str(data.get("content_type", "") or "").strip()
         auto_time = data.get("auto_time", True)
         manual_dt = data.get("scheduled_at")  # "2025-12-25T10:00"
 
@@ -940,6 +958,20 @@ def create_app() -> Flask:
                 ),
                 400,
             )
+
+        if brand == "gymark":
+            content_type = str(video.category_id or "").strip()
+            if not content_type:
+                return (
+                    jsonify(
+                        {
+                            "error": "Este video de Gymark no tiene categoría detectada por IA. Analízalo con IA antes de programar."
+                        }
+                    ),
+                    400,
+                )
+        elif not content_type:
+            content_type = _default_content_type_for_brand(brand)
 
         allowed_categories = set(config.BRAND_CATEGORIES.get(brand, []))
         if content_type not in allowed_categories:
@@ -1189,11 +1221,7 @@ def create_app() -> Flask:
     @app.route("/api/hashtags/suggest", methods=["GET"])
     def suggest_hashtags():
         auth_brand = _auth_brand() or "gymark"
-        default_type = (
-            "gaming"
-            if auth_brand == "tatuct"
-            else ("milita_beauty" if auth_brand == "milita" else "acc_gimnasio")
-        )
+        default_type = _default_content_type_for_brand(auth_brand)
         content_type = request.args.get("content_type", default_type)
         platform = request.args.get("platform", "tiktok")
         allowed = set(config.BRAND_CATEGORIES.get(auth_brand, []))
@@ -1226,11 +1254,7 @@ def create_app() -> Flask:
         if not platforms:
             platforms = list(allowed_platforms)
 
-        default_type = (
-            "gaming"
-            if auth_brand == "tatuct"
-            else ("milita_beauty" if auth_brand == "milita" else "acc_gimnasio")
-        )
+        default_type = _default_content_type_for_brand(auth_brand)
         content_type = data.get("content_type", default_type)
         if content_type not in set(config.BRAND_CATEGORIES.get(auth_brand, [])):
             content_type = default_type

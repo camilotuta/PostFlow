@@ -62,7 +62,7 @@ class Video(db.Model):
     def to_dict(self):
         active_path = self.get_publish_path()
         return {
-            "id": self.id,
+            "id": int(self.id) if self.id else None,
             "filename": self.filename,
             "original_name": self.original_name,
             "brand": self.brand,
@@ -125,8 +125,8 @@ class Post(db.Model):
 
     def to_dict(self):
         return {
-            "id": self.id,
-            "video_id": self.video_id,
+            "id": int(self.id) if self.id else None,
+            "video_id": int(self.video_id) if self.video_id else None,
             "brand": self.brand,
             "platform": self.platform,
             "title": self.title,

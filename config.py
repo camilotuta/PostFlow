@@ -73,6 +73,11 @@ BRANDS = {
         "color": "#ff69b4",
         "platforms": ["tiktok"],
     },
+    "escape": {
+        "label": "Escape 🚀",
+        "color": "#00bcd4",
+        "platforms": ["tiktok", "instagram"],
+    },
 }
 
 # ─────────────────────────────────────────────────────────────────
@@ -361,6 +366,26 @@ BEST_TIMES = {
             6: [],  # Domingo – débil (skip)
         },
     },
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  🎓 ESCAPE PROCTORING (USA/LatAm hispano · EST)
+    #  Slots base para referencia del panel legacy (scheduler real usa SchedulerService)
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    "escape_proctoring": {
+        "tiktok": {
+            1: [10, 19],  # Martes 10:00 / 19:30 (aprox en bloque legacy)
+            2: [11, 20],  # Miércoles 11:00 / 20:00
+            3: [9, 19],  # Jueves 09:00 / 19:30
+            4: [12, 20],  # Viernes 12:00 / 20:00
+            5: [10],  # Sábado 10:00
+        },
+        "instagram": {
+            1: [11, 19],  # Martes 11:00 / 19:30
+            2: [11, 20],  # Miércoles 11:00 / 20:00
+            3: [11, 19],  # Jueves 11:00 / 19:30
+            4: [12, 20],  # Viernes 12:00 / 20:00
+            5: [10],  # Sábado 10:00
+        },
+    },
 }
 
 # ─────────────────────────────────────────
@@ -478,6 +503,36 @@ HASHTAGS = {
         "#ForYou",
         "#Viral",
     ],
+    # ── Escape (Proctoring educativo – TikTok + Instagram) ────────
+    "escape_proctoring": [
+        "#EstudiantesLatinoamerica",
+        "#UniversitariosLatinoamerica",
+        "#EstudiantesUSA",
+        "#HispanicStudents",
+        "#ExamenesVirtuales",
+        "#LockDownBrowser",
+        "#SMOWL",
+        "#Proctoring",
+        "#ProctoringTips",
+        "#OnlineExam",
+        "#StudyHacks",
+        "#TipsDeEstudio",
+        "#AyudaUniversitaria",
+        "#fyp",
+        "#ForYou",
+        "#Viral",
+        "#ClasesVirtuales",
+        "#HacksUniversitarios",
+        "#ExamTips",
+        "#StudyTok",
+        "#Educational",
+        "#TikTokUniversity",
+        "#EstudiantesHispanos",
+        "#ProctoringColombia",
+        "#ProctoringMexico",
+        "#LockDownBrowserTips",
+        "#SMOWLTrucos",
+    ],
 }
 
 # Gymark: hashtags virales FIJOS (van en todos los videos sin excepción)
@@ -511,6 +566,7 @@ BRAND_CATEGORIES = {
     ],
     "tatuct": ["gaming"],
     "milita": ["milita_beauty"],
+    "escape": ["escape_proctoring"],
 }
 
 # Login por cuenta/marca
@@ -518,6 +574,7 @@ BRAND_LOGIN_PASSWORDS = {
     "gymark": "gymark",
     "tatuct": "123",
     "milita": "camilo",
+    "escape": "escapetopuria",
 }
 
 # Tokens para feed ICS público por marca
@@ -534,4 +591,5 @@ BRAND_CALENDAR_TOKENS = {
     "gymark": os.environ.get("GYMARK_CALENDAR_TOKEN") or _cal_token("gymark"),
     "tatuct": os.environ.get("TATUCT_CALENDAR_TOKEN") or _cal_token("tatuct"),
     "milita": os.environ.get("MILITA_CALENDAR_TOKEN") or _cal_token("milita"),
+    "escape": os.environ.get("ESCAPE_CALENDAR_TOKEN") or _cal_token("escape"),
 }

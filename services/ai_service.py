@@ -429,7 +429,7 @@ class AIService:
     ) -> dict:
         """
         Sube el video a Gemini y genera título/descripcion basados
-        en la marca (gymark/tatuct/milita) y la categoría.
+        en la marca (gymark/tatuct/milita/escape) y la categoría.
 
         Args:
             extra_context: Contexto adicional o feedback del usuario para mejorar la generación.
@@ -491,14 +491,25 @@ class AIService:
                                     "Marca de la cuenta: Gimnasio / Ropa deportiva (Gymark)."
                                     if brand == "gymark"
                                     else (
-                                        "Cuenta personal de contenido femenino en México (@milita). "
-                                        "Nicho combinado: maquillaje (tutoriales GRWM, looks diarios, transformaciones), "
-                                        "fitness (rutinas, motivación, workouts), cuidado personal (skincare, hábitos), "
-                                        "amor propio (self-love, mindset, empoderamiento) y tips de belleza (hacks, "
-                                        "productos, técnicas). "
-                                        "Audiencia objetivo: mujeres 18-34 años en México. "
-                                        "Tono: cercano, empoderador, motivacional, femenino y auténtico. "
-                                        "Plataforma única: TikTok México."
+                                        (
+                                            "Cuenta de apoyo estudiantil hispano (@escape). "
+                                            "Nicho: proctoring, exámenes virtuales, LockDown Browser, SMOWL, "
+                                            "hacks de estudio, tips universitarios y ayuda para estudiantes de LatAm y USA. "
+                                            "Audiencia objetivo: estudiantes hispanos universitarios y de college en todo el continente. "
+                                            "Tono: directo, útil, rápido y educativo con gancho desde los primeros segundos. "
+                                            "Plataformas: TikTok e Instagram Reels."
+                                        )
+                                        if brand == "escape"
+                                        else (
+                                            "Cuenta personal de contenido femenino en México (@milita). "
+                                            "Nicho combinado: maquillaje (tutoriales GRWM, looks diarios, transformaciones), "
+                                            "fitness (rutinas, motivación, workouts), cuidado personal (skincare, hábitos), "
+                                            "amor propio (self-love, mindset, empoderamiento) y tips de belleza (hacks, "
+                                            "productos, técnicas). "
+                                            "Audiencia objetivo: mujeres 18-34 años en México. "
+                                            "Tono: cercano, empoderador, motivacional, femenino y auténtico. "
+                                            "Plataforma única: TikTok México."
+                                        )
                                     )
                                 )
                             )
@@ -541,6 +552,8 @@ class AIService:
                                 )
                             elif brand == "milita":
                                 parsed_result["category_id"] = "milita_beauty"
+                            elif brand == "escape":
+                                parsed_result["category_id"] = "escape_proctoring"
 
                             if self._looks_generic_or_audio_missing(parsed_result):
                                 last_error = ValueError(

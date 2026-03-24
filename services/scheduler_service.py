@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 COL_TZ = ZoneInfo(TIMEZONE)
 BRAND_TIMEZONES = {
     "milita": "America/Mexico_City",
+    "escape": "America/New_York",
 }
 
 SCHEDULE_SLOTS = {
@@ -87,12 +88,29 @@ SCHEDULE_SLOTS = {
             6: ["10:00"],
         },
     },
+    "escape_proctoring": {
+        "tiktok": {
+            1: ["10:00", "19:30"],
+            2: ["11:00", "20:00"],
+            3: ["09:00", "19:30"],
+            4: ["12:00", "20:00"],
+            5: ["10:00"],
+        },
+        "instagram": {
+            1: ["11:00", "19:30"],
+            2: ["11:00", "20:00"],
+            3: ["11:00", "19:30"],
+            4: ["12:00", "20:00"],
+            5: ["10:00"],
+        },
+    },
 }
 
 
 DAILY_PLATFORM_LIMITS = {
     "tatuct": {"tiktok": 2, "youtube_shorts": 2},
     "milita": {"tiktok": 2},
+    "escape": {"tiktok": 2, "instagram": 1},
     "gymark": {
         "tiktok": 2,
         "instagram": 1,
@@ -104,6 +122,7 @@ DAILY_PLATFORM_LIMITS = {
 DAILY_TOTAL_LIMITS = {
     "tatuct": 3,
     "milita": 2,
+    "escape": 3,
     "gymark": 5,
 }
 

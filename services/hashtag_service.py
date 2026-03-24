@@ -16,6 +16,7 @@ CONTENT_TYPE_LABELS = {
     "sup_deportivos": "sup_deportivos",
     "home_gym": "home_gym",
     "milita_beauty": "milita_beauty",
+    "escape_proctoring": "escape_proctoring",
 }
 
 
@@ -42,7 +43,11 @@ class HashtagService:
         fallback_type = (
             "gaming"
             if brand == "tatuct"
-            else "milita_beauty" if brand == "milita" else "acc_gimnasio"
+            else (
+                "milita_beauty"
+                if brand == "milita"
+                else "escape_proctoring" if brand == "escape" else "acc_gimnasio"
+            )
         )
         effective_type = content_type if content_type in HASHTAGS else fallback_type
 
@@ -57,6 +62,11 @@ class HashtagService:
         limit = count
         if limit is None and platform == "tiktok" and brand in {"tatuct", "milita"}:
             limit = 12
+        if limit is None and brand == "escape":
+            if platform == "tiktok":
+                limit = 12
+            elif platform == "instagram":
+                limit = 10
         if limit is None:
             limit = len(fixed_tags)
 
@@ -90,6 +100,7 @@ class HashtagService:
             {"key": "sup_deportivos", "label": "Sup. Deportivos"},
             {"key": "home_gym", "label": "Home Gym"},
             {"key": "milita_beauty", "label": "Beauty & Fitness"},
+            {"key": "escape_proctoring", "label": "Proctoring & Exámenes"},
         ]
 
 
