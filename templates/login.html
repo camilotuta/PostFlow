@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PostFlow · Login</title>
+    <link rel="icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/static/css/style.css?v=20260314-3" />
     <style>
       body {
@@ -71,7 +72,7 @@
         <div>
           <label class="form-label" for="brand">Cuenta</label>
           <select id="brand" name="brand" class="form-input" required>
-            {% for key, info in brands.items() %}
+            {% for key, info in brands %}
             <option value="{{ key }}">{{ info.label }}</option>
             {% endfor %}
           </select>

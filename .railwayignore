@@ -1,9 +1,0 @@
-.git
-.git/
-.venv
-.venv/
-static/uploads/
-socialmedia.db
-__pycache__/
-*.mp4
-*.mov

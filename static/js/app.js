@@ -11,6 +11,8 @@ let currentBrand = "gymark";
 let brandsData = []; // [{key, label, color, platforms, categories}]
 let uploadBrand = "gymark"; // marca activa en el tab de subir
 let brandAssets = null;
+let dashboardIntervalId = null;
+let authRedirecting = false;
 
 const PERFECT_WINDOWS = {
   gaming: {
@@ -79,8 +81,18 @@ document.addEventListener("DOMContentLoaded", () => {
   safeInit(initScheduleForm, "initScheduleForm");
   safeInit(initPostsFilter, "initPostsFilter");
   safeInit(loadDashboard, "loadDashboard");
-  setInterval(loadDashboard, 30_000); // refresca cada 30s
+  dashboardIntervalId = setInterval(loadDashboard, 30_000); // refresca cada 30s
 });
+
+function handleUnauthorized() {
+  if (authRedirecting) return;
+  authRedirecting = true;
+  if (dashboardIntervalId) {
+    clearInterval(dashboardIntervalId);
+    dashboardIntervalId = null;
+  }
+  window.location.href = "/login";
+}
 
 function safeInit(fn, name) {
   try {
@@ -177,6 +189,7 @@ async function loadDashboard() {
     renderMiniList("upcomingPosts", data.upcoming, "scheduled");
     renderMiniList("recentPosts", data.recent, "published");
   } catch (e) {
+    if (e && e._status === 401) return;
     console.error("Dashboard error:", e);
   }
 }
@@ -227,7 +240,7 @@ async function refreshAllData() {
   }
   try {
     const posts = await get("/api/posts");
-    calendarPosts = posts;
+    calendarPosts = posts.filter((p) => p.status !== "cancelled");
     allVideosCache = videos;
     window._postsTableCache = {};
     posts.forEach((p) => {
@@ -665,7 +678,17 @@ function uploadOneFile(file, brand, category_id, onProgress) {
         onProgress(Math.round((e.loaded / e.total) * 100));
     };
     xhr.onload = () => {
-      const data = JSON.parse(xhr.responseText);
+      let data;
+      try {
+        data = JSON.parse(xhr.responseText || "{}");
+      } catch (_e) {
+        data = {
+          error:
+            xhr.status === 401
+              ? "Sesión expirada. Inicia sesión de nuevo."
+              : `Error del servidor (HTTP ${xhr.status}).`,
+        };
+      }
       if (xhr.status >= 200 && xhr.status < 300) resolve(data);
       else reject(data);
     };
@@ -1598,6 +1621,10 @@ async function loadApiStatus() {
 async function get(url) {
   const r = await fetch(API + url);
   if (!r.ok) {
+    if (r.status === 401) {
+      handleUnauthorized();
+      throw { error: "No autenticado", _status: 401 };
+    }
     let err;
     try {
       err = await r.json();
@@ -1616,6 +1643,10 @@ async function post(url, body) {
     body: JSON.stringify(body),
   });
   if (!r.ok) {
+    if (r.status === 401) {
+      handleUnauthorized();
+      throw { error: "No autenticado", _status: 401 };
+    }
     let err;
     try {
       err = await r.json();
@@ -1630,6 +1661,10 @@ async function post(url, body) {
 async function del(url) {
   const r = await fetch(API + url, { method: "DELETE" });
   if (!r.ok) {
+    if (r.status === 401) {
+      handleUnauthorized();
+      throw { error: "No autenticado", _status: 401 };
+    }
     let err;
     try {
       err = await r.json();
@@ -1877,7 +1912,7 @@ async function loadCalendarTab() {
     const posts = await resP.json();
     const videos = await resV.json();
 
-    calendarPosts = posts;
+    calendarPosts = posts.filter((p) => p.status !== "cancelled");
     allVideosCache = videos;
     calendarFilter = "all";
 
@@ -2077,6 +2112,7 @@ function renderCalendarGrid() {
           <div class="cal-events">`;
 
     const dayPosts = calendarPosts.filter((p) => {
+      if (p.status === "cancelled") return false;
       if (!p.scheduled_at) return false;
       const postDate = String(p.scheduled_at).slice(0, 10).replace(/\//g, "-");
       return postDate === dateStr;
