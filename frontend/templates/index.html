@@ -1,0 +1,911 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PostFlow · Subir Videos</title>
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="stylesheet" href="/static/css/style.css?v=20260322-02" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <!-- ══════════════════════════════════════════════════════════
+     SIDEBAR
+════════════════════════════════════════════════════════════ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar__brand">
+        <div class="sidebar__logo">
+          <span class="logo-icon">▲</span>
+        </div>
+        <div>
+          <div class="sidebar__title">POSTFLOW</div>
+          <div class="sidebar__sub">Subir Videos</div>
+        </div>
+      </div>
+
+      <nav class="sidebar__nav">
+        <button
+          class="nav-btn active"
+          data-tab="dashboard"
+          aria-label="Dashboard"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="nav-icon"
+          >
+            <rect width="7" height="9" x="3" y="3" rx="1" />
+            <rect width="7" height="5" x="14" y="3" rx="1" />
+            <rect width="7" height="9" x="14" y="12" rx="1" />
+            <rect width="7" height="5" x="3" y="16" rx="1" /></svg
+          ><span class="nav-text">Dashboard</span>
+        </button>
+        <button class="nav-btn" data-tab="upload" aria-label="Subir Video">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="nav-icon"
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" x2="12" y1="3" y2="15" /></svg
+          ><span class="nav-text">Subir</span>
+        </button>
+        <button class="nav-btn" data-tab="schedule" aria-label="Programar">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="nav-icon"
+          >
+            <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+            <line x1="16" x2="16" y1="2" y2="6" />
+            <line x1="8" x2="8" y1="2" y2="6" />
+            <line x1="3" x2="21" y1="10" y2="10" />
+            <path d="M10 14h4" />
+            <path d="M12 12v4" /></svg
+          ><span class="nav-text">Programar</span>
+        </button>
+        <button class="nav-btn" data-tab="posts" aria-label="Posts">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="nav-icon"
+          >
+            <line x1="8" x2="21" y1="6" y2="6" />
+            <line x1="8" x2="21" y1="12" y2="12" />
+            <line x1="8" x2="21" y1="18" y2="18" />
+            <line x1="3" x2="3.01" y1="6" y2="6" />
+            <line x1="3" x2="3.01" y1="12" y2="12" />
+            <line x1="3" x2="3.01" y1="18" y2="18" /></svg
+          ><span class="nav-text">Posts</span>
+        </button>
+        <button class="nav-btn" data-tab="calendar" aria-label="Calendario">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="nav-icon"
+          >
+            <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+            <line x1="16" x2="16" y1="2" y2="6" />
+            <line x1="8" x2="8" y1="2" y2="6" />
+            <line x1="3" x2="21" y1="10" y2="10" /></svg
+          ><span class="nav-text">Calendario</span>
+        </button>
+      </nav>
+    </aside>
+
+    <!-- ══════════════════════════════════════════════════════════
+     MAIN
+════════════════════════════════════════════════════════════ -->
+    <main class="main">
+      <!-- ── HEADER ──────────────────────────────────────────── -->
+      <header class="topbar">
+        <div class="topbar__left">
+          <h1 class="topbar__heading" id="pageTitle">Dashboard</h1>
+          <span class="topbar__time" id="currentTime"></span>
+        </div>
+        <div class="topbar__right">
+          <div class="tz-badge" title="Cuenta activa">
+            {{ auth_label or auth_brand or 'Cuenta' }}
+          </div>
+          <div class="tz-badge">
+            <svg
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              style="vertical-align: text-bottom; margin-right: 4px"
+            >
+              <path
+                d="M12 2A10 10 0 1 0 22 12 10 10 0 0 0 12 2ZM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"
+              />
+            </svg>
+            Colombia
+          </div>
+          <form method="POST" action="/logout" style="margin: 0">
+            <button type="submit" class="btn btn-ghost btn-sm">Salir</button>
+          </form>
+        </div>
+      </header>
+
+      <!-- ═══════════════════════════════════════════════════════
+        TAB: DASHBOARD
+  ════════════════════════════════════════════════════════ -->
+      <section class="tab-content active" id="tab-dashboard">
+        <!-- KPIs -->
+        <div class="kpi-grid" id="kpiGrid">
+          <div class="kpi-card">
+            <div class="kpi-icon">
+              <svg
+                width="24"
+                height="24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <rect width="20" height="15" x="2" y="7" rx="2" ry="2" />
+                <polyline points="17 2 12 7 7 2" />
+              </svg>
+            </div>
+            <div class="kpi-value" id="kpi-videos">–</div>
+            <div class="kpi-label">Videos subidos</div>
+          </div>
+          <div class="kpi-card kpi-green">
+            <div class="kpi-icon">
+              <svg
+                width="24"
+                height="24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </div>
+            <div class="kpi-value" id="kpi-published">–</div>
+            <div class="kpi-label">Publicados</div>
+          </div>
+          <div class="kpi-card kpi-blue">
+            <div class="kpi-icon">
+              <svg
+                width="24"
+                height="24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+                <line x1="16" x2="16" y1="2" y2="6" />
+                <line x1="8" x2="8" y1="2" y2="6" />
+                <line x1="3" x2="21" y1="10" y2="10" />
+              </svg>
+            </div>
+            <div class="kpi-value" id="kpi-scheduled">–</div>
+            <div class="kpi-label">Programados</div>
+          </div>
+          <div class="kpi-card kpi-red">
+            <div class="kpi-icon">
+              <svg
+                width="24"
+                height="24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
+                />
+                <line x1="12" x2="12" y1="9" y2="13" />
+                <line x1="12" x2="12.01" y1="17" y2="17" />
+              </svg>
+            </div>
+            <div class="kpi-value" id="kpi-failed">–</div>
+            <div class="kpi-label">Fallidos</div>
+          </div>
+        </div>
+
+        <!-- Plataformas pie -->
+        <div class="dash-row">
+          <div class="card">
+            <h3 class="card__title">
+              <svg
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                style="vertical-align: text-bottom; margin-right: 6px"
+              >
+                <line x1="18" x2="18" y1="20" y2="10" />
+                <line x1="12" x2="12" y1="20" y2="4" />
+                <line x1="6" x2="6" y1="20" y2="14" />
+              </svg>
+              Por Plataforma
+            </h3>
+            <div class="platform-bars" id="platformBars"></div>
+          </div>
+          <div class="card">
+            <h3 class="card__title">
+              <svg
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                style="vertical-align: text-bottom; margin-right: 6px"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              Próximos Posts
+            </h3>
+            <div class="posts-mini-list" id="upcomingPosts">
+              <div class="empty-msg">No hay posts programados</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recientes -->
+        <div class="card mt-16">
+          <h3 class="card__title">
+            <svg
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              style="vertical-align: text-bottom; margin-right: 6px"
+            >
+              <path d="M22 2 11 13" />
+              <path d="m22 2-7 20-4-9-9-4Z" />
+            </svg>
+            Últimos Publicados
+          </h3>
+          <div class="posts-mini-list" id="recentPosts">
+            <div class="empty-msg">
+              Aún no has publicado nada – ¡hora de subir!
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+        TAB: SUBIR VIDEO
+  ════════════════════════════════════════════════════════ -->
+      <section class="tab-content" id="tab-upload">
+        <div class="card">
+          <h3 class="card__title">
+            <svg
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              style="vertical-align: text-bottom; margin-right: 6px"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" x2="12" y1="3" y2="15" />
+            </svg>
+            Sube tus Videos
+          </h3>
+          <p class="card__desc">
+            Selecciona varios videos a la vez · Formatos: MP4, MOV, AVI, MKV,
+            WEBM · Máx. 500 MB por video
+          </p>
+
+          <!-- Selector de marca e IA -->
+          <div class="upload-brand-row">
+            <span class="upload-brand-label">¿Para qué cuenta?</span>
+            <div class="brand-selector" id="uploadBrandBtns"></div>
+          </div>
+          <div
+            class="upload-brand-row"
+            style="margin-top: 15px; margin-bottom: 20px"
+          >
+            <span class="upload-brand-label">Categoría/Etiqueta</span>
+            <select
+              id="uploadCategorySelect"
+              class="form-input"
+              style="max-width: 300px"
+            ></select>
+          </div>
+
+          <!-- Zona de drop –– acepta múltiples -->
+          <div class="drop-zone" id="dropZone">
+            <div class="drop-zone__icon">
+              <svg
+                width="48"
+                height="48"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"
+                />
+                <path d="M12 12v9" />
+                <path d="m8 16 4-4 4 4" />
+              </svg>
+            </div>
+            <div class="drop-zone__text">Arrastra uno o varios videos aquí</div>
+            <div class="drop-zone__sub">
+              o haz clic para seleccionar (puedes elegir varios)
+            </div>
+            <input
+              type="file"
+              id="videoFileInput"
+              accept="video/*"
+              multiple
+              hidden
+            />
+          </div>
+
+          <!-- Cola de videos pendientes -->
+          <div class="upload-queue hidden" id="uploadQueue">
+            <div class="upload-queue__header">
+              <div class="upload-queue__title" id="queueTitle">
+                0 videos listos para subir
+              </div>
+              <div class="upload-queue__actions">
+                <button class="btn btn-ghost btn-sm" id="btnAddMore">
+                  + Agregar más
+                </button>
+                <button class="btn btn-primary" id="btnUploadAll">
+                  ⬆ Subir Todos
+                </button>
+              </div>
+            </div>
+            <div class="queue-list" id="queueList"></div>
+            <!-- Barra global -->
+            <div
+              class="progress-wrap"
+              id="uploadProgress"
+              style="margin-top: 16px"
+            >
+              <div class="progress-bar">
+                <div class="progress-bar__fill" id="progressFill"></div>
+              </div>
+              <div class="progress-label" id="progressLabel"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Galería de videos subidos -->
+        <div class="card mt-16">
+          <h3 class="card__title">
+            <svg
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              style="vertical-align: text-bottom; margin-right: 6px"
+            >
+              <path
+                d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"
+              />
+            </svg>
+            Videos Disponibles
+          </h3>
+          <div class="video-gallery" id="videoGallery">
+            <div class="empty-msg">No has subido videos aún</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+        TAB: PERSONALIZAR VIDEO
+  ════════════════════════════════════════════════════════ -->
+      <!-- ═══════════════════════════════════════════════════════
+        TAB: PROGRAMAR
+  ════════════════════════════════════════════════════════ -->
+      <section class="tab-content" id="tab-schedule">
+        <div class="schedule-layout">
+          <!-- Formulario izquierda -->
+          <div class="card schedule-form-card">
+            <h3 class="card__title">
+              <svg
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                style="vertical-align: text-bottom; margin-right: 6px"
+              >
+                <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+                <line x1="16" x2="16" y1="2" y2="6" />
+                <line x1="8" x2="8" y1="2" y2="6" />
+                <line x1="3" x2="21" y1="10" y2="10" />
+                <path d="M10 14h4" />
+                <path d="M12 12v4" />
+              </svg>
+              Programar Publicación
+            </h3>
+
+            <!-- 0. Marca -->
+            <div class="form-section">
+              <label class="form-label">0 · Marca / Cuenta</label>
+              <div class="brand-selector" id="brandSelector"></div>
+            </div>
+
+            <!-- 1. Seleccionar video(s) -->
+            <div class="form-section">
+              <div class="schedule-videos-head">
+                <label class="form-label schedule-videos-label"
+                  >1 · Selecciona los videos a programar</label
+                >
+                <button
+                  type="button"
+                  id="btnSelectAllVideos"
+                  class="btn btn-ghost btn-sm select-all-btn"
+                >
+                  Seleccionar todos
+                </button>
+              </div>
+              <div id="schedVideoList" class="sched-video-list">
+                <div class="empty-msg">Cargando videos...</div>
+              </div>
+            </div>
+
+            <!-- 2. Plataformas -->
+            <div class="form-section">
+              <label class="form-label">2 · Plataformas destino</label>
+              <div class="platform-checks" id="platformChecks">
+                <label class="plat-check" data-plat="tiktok">
+                  <input type="checkbox" value="tiktok" checked />
+                  <span class="plat-check__box">
+                    <img
+                      src="https://cdn.simpleicons.org/tiktok"
+                      class="plat-logo"
+                      alt="TikTok"
+                    />
+                    TikTok
+                  </span>
+                </label>
+                <label class="plat-check" data-plat="instagram">
+                  <input type="checkbox" value="instagram" checked />
+                  <span class="plat-check__box">
+                    <img
+                      src="https://cdn.simpleicons.org/instagram"
+                      class="plat-logo"
+                      alt="Instagram"
+                    />
+                    Instagram
+                  </span>
+                </label>
+                <label class="plat-check" data-plat="facebook">
+                  <input type="checkbox" value="facebook" checked />
+                  <span class="plat-check__box">
+                    <img
+                      src="https://cdn.simpleicons.org/facebook"
+                      class="plat-logo"
+                      alt="Facebook"
+                    />
+                    Facebook
+                  </span>
+                </label>
+                <label class="plat-check" data-plat="youtube_shorts">
+                  <input type="checkbox" value="youtube_shorts" checked />
+                  <span class="plat-check__box">
+                    <img
+                      src="https://cdn.simpleicons.org/youtube"
+                      class="plat-logo"
+                      alt="YouTube Shorts"
+                    />
+                    YouTube Shorts
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 3. Tipo de contenido -->
+            <div class="form-section">
+              <label class="form-label">3 · Tipo de contenido</label>
+              <select class="form-select" id="contentTypeSelect">
+                <option value="">– Cargando –</option>
+              </select>
+            </div>
+
+            <!-- 3b. Horario -->
+            <div class="form-section">
+              <label class="form-label">6 · Horario</label>
+              <div class="schedule-toggle" id="scheduleToggle">
+                <button class="toggle-btn active" data-mode="auto">
+                  <svg
+                    width="16"
+                    height="16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    style="vertical-align: text-bottom; margin-right: 4px"
+                  >
+                    <path
+                      d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"
+                    />
+                  </svg>
+                  Automático (mejor hora)
+                </button>
+                <button class="toggle-btn" data-mode="manual">
+                  <svg
+                    width="16"
+                    height="16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    style="vertical-align: text-bottom; margin-right: 4px"
+                  >
+                    <path
+                      d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"
+                    />
+                  </svg>
+                  Manual
+                </button>
+              </div>
+              <div id="manualDateWrap" class="hidden mt-8">
+                <input
+                  type="datetime-local"
+                  class="form-input"
+                  id="manualDateInput"
+                />
+              </div>
+            </div>
+
+            <!-- Preview del horario -->
+            <div class="schedule-preview-box hidden" id="schedulePreviewBox">
+              <div class="preview-title">
+                <svg
+                  width="16"
+                  height="16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                  style="vertical-align: text-bottom; margin-right: 4px"
+                >
+                  <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z" />
+                  <path d="M12 6v6l4 2" />
+                </svg>
+                Los mejores horarios calculados:
+              </div>
+              <div id="schedulePreviewContent"></div>
+            </div>
+
+            <button class="btn btn-primary btn-full mt-16" id="btnSchedule">
+              <svg
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                style="vertical-align: text-bottom; margin-right: 6px"
+              >
+                <path
+                  d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"
+                />
+                <path
+                  d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"
+                />
+                <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+                <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+              </svg>
+              Programar Post
+            </button>
+          </div>
+
+          <!-- Preview derecha -->
+          <div class="schedule-preview-col">
+            <div class="card sticky-card" id="videoPreviewCard">
+              <h3 class="card__title">
+                <svg
+                  width="20"
+                  height="20"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                  style="vertical-align: text-bottom; margin-right: 6px"
+                >
+                  <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+                  <path d="M12 18h.01" />
+                </svg>
+                Vista Previa
+              </h3>
+              <div class="preview-placeholder" id="previewPlaceholder">
+                <div class="preview-placeholder__icon">
+                  <svg
+                    width="48"
+                    height="48"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    viewBox="0 0 24 24"
+                  >
+                    <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                    <circle cx="9" cy="9" r="2" />
+                    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                  </svg>
+                </div>
+                <div class="preview-placeholder__text">Selecciona un video</div>
+              </div>
+              <video id="schedPreviewVideo" class="hidden" controls></video>
+              <div class="preview-meta" id="previewMeta"></div>
+            </div>
+
+            <!-- Mejores horarios por plataforma -->
+            <div class="card mt-16">
+              <h3 class="card__title">
+                <svg
+                  width="20"
+                  height="20"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                  style="vertical-align: text-bottom; margin-right: 6px"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                Mejores Horarios
+              </h3>
+              <div class="best-times-grid" id="bestTimesReference"></div>
+              <p class="best-times-note">
+                * Horario Colombia (UTC-5). Referencia por nicho y plataforma.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+        TAB: MIS POSTS
+  ════════════════════════════════════════════════════════ -->
+      <section class="tab-content" id="tab-posts">
+        <!-- Filtros -->
+        <div class="posts-filters">
+          <button class="filter-btn active" data-status="all">Todos</button>
+          <button class="filter-btn" data-status="scheduled">
+            <svg
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              style="vertical-align: text-bottom; margin-right: 4px"
+            >
+              <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+              <line x1="16" x2="16" y1="2" y2="6" />
+              <line x1="8" x2="8" y1="2" y2="6" />
+              <line x1="3" x2="21" y1="10" y2="10" />
+            </svg>
+            Programados
+          </button>
+          <button class="filter-btn" data-status="published">
+            <svg
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              style="vertical-align: text-bottom; margin-right: 4px"
+            >
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+            Publicados
+          </button>
+          <button class="filter-btn" data-status="failed">
+            <svg
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              style="vertical-align: text-bottom; margin-right: 4px"
+            >
+              <path
+                d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
+              />
+              <line x1="12" x2="12" y1="9" y2="13" />
+              <line x1="12" x2="12.01" y1="17" y2="17" />
+            </svg>
+            Fallidos
+          </button>
+          <button class="filter-btn" data-status="cancelled">
+            <svg
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              style="vertical-align: text-bottom; margin-right: 4px"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" x2="9" y1="9" y2="15" />
+              <line x1="9" x2="15" y1="9" y2="15" />
+            </svg>
+            Cancelados
+          </button>
+          <button
+            id="btnClearAllPosts"
+            class="filter-btn"
+            style="margin-left: auto; color: #ff4d4d; border-color: #ff4d4d"
+            title="Elimina todos los posts del calendario (no borra los videos)"
+          >
+            <svg
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              style="vertical-align: text-bottom; margin-right: 4px"
+            >
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14H6L5 6" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+              <path d="M9 6V4h6v2" />
+            </svg>
+            Vaciar calendario
+          </button>
+        </div>
+
+        <div class="posts-table-wrap">
+          <table class="posts-table" id="postsTable">
+            <thead>
+              <tr>
+                <th>Video</th>
+                <th>Plataforma</th>
+                <th>Título</th>
+                <th>Tipo</th>
+                <th>Programado</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="postsTableBody">
+              <tr>
+                <td colspan="7" class="empty-msg">Cargando...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════
+        TAB: CALENDARIO
+      ════════════════════════════════════════════════════════ -->
+      <section class="tab-content" id="tab-calendar">
+        <div class="calendar-layout">
+          <!-- Main: Calendario Mensual -->
+          <div class="calendar-main">
+            <div class="calendar-header">
+              <div class="cal-nav">
+                <button id="prevMonth" class="btn-icon">◀</button>
+                <h2 id="currentMonthLabel">Marzo 2026</h2>
+                <button id="nextMonth" class="btn-icon">▶</button>
+              </div>
+              <div class="cal-actions">
+                <button id="goToday" class="btn btn-ghost btn-sm">
+                  Hoy (T)
+                </button>
+                <button id="copyCalendarFeed" class="btn btn-ghost btn-sm">
+                  Google Sync
+                </button>
+              </div>
+            </div>
+            <div class="calendar-subheader">
+              <div class="cal-views">
+                <button class="view-chip active" data-view="month">
+                  Mes (M)
+                </button>
+                <button class="view-chip" data-view="week">Semana (W)</button>
+                <button class="view-chip" data-view="day">Día (D)</button>
+              </div>
+              <div class="cal-filters">
+                <button
+                  class="filter-chip active"
+                  data-filter="all"
+                  id="calendarAccountFilter"
+                >
+                  Esta cuenta
+                </button>
+              </div>
+            </div>
+
+            <div class="calendar-grid-header" id="calendarGridHeader">
+              <div>Lun</div>
+              <div>Mar</div>
+              <div>Mié</div>
+              <div>Jue</div>
+              <div>Vie</div>
+              <div>Sáb</div>
+              <div>Dom</div>
+            </div>
+            <div class="calendar-grid" id="calendarGrid">
+              <!-- Días generados por JS -->
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ══════════════════════════════════════════════════════════
+     TOAST NOTIFICATIONS
+════════════════════════════════════════════════════════════ -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- ══════════════════════════════════════════════════════════
+     MODAL
+════════════════════════════════════════════════════════════ -->
+    <div class="modal-overlay hidden" id="modalOverlay">
+      <div class="modal" id="modal">
+        <button class="modal__close" id="modalClose">✕</button>
+        <div class="modal__content" id="modalContent"></div>
+      </div>
+    </div>
+
+    <script src="/static/js/app.js?v=20260322-02"></script>
+  </body>
+</html>

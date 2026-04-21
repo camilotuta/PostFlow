@@ -136,7 +136,8 @@ export function formatDateTime(value) {
   if (!value) return "";
   const raw = String(value).replace(" ", "T");
   const dt = raw.endsWith("Z") ? new Date(raw) : new Date(raw);
-  if (Number.isNaN(dt.getTime())) return String(value).slice(0, 16).replace("T", " ");
+  if (Number.isNaN(dt.getTime()))
+    return String(value).slice(0, 16).replace("T", " ");
   const year = dt.getUTCFullYear();
   const month = String(dt.getUTCMonth() + 1).padStart(2, "0");
   const day = String(dt.getUTCDate()).padStart(2, "0");

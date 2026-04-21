@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PostFlow">
+  <rect width="64" height="64" rx="16" fill="#6c63ff" />
+  <path d="M20 14h24a6 6 0 0 1 6 6v10a6 6 0 0 1-6 6H32l-10 10V36h-2a6 6 0 0 1-6-6V20a6 6 0 0 1 6-6Z"
+    fill="#fff" opacity="0.95" />
+  <path d="M25 24h14M25 31h9" stroke="#6c63ff" stroke-width="4" stroke-linecap="round" />
+</svg>

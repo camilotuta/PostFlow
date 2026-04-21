@@ -15,7 +15,11 @@ const FALLBACK_TITLES = {
 };
 
 function fromFilename(filePath) {
-  const base = path.basename(filePath).replace(path.extname(filePath), "").replace(/[_-]+/g, " ").trim();
+  const base = path
+    .basename(filePath)
+    .replace(path.extname(filePath), "")
+    .replace(/[_-]+/g, " ")
+    .trim();
   return base || "Video";
 }
 
@@ -43,7 +47,10 @@ function inferMimeType(videoPath) {
 }
 
 function cleanJsonText(text) {
-  return String(text || "{}").trim().replace(JSON_FENCE_RE, "").trim();
+  return String(text || "{}")
+    .trim()
+    .replace(JSON_FENCE_RE, "")
+    .trim();
 }
 
 function buildBrandContext(brand) {
@@ -107,7 +114,9 @@ ${context}
 }
 
 function sanitizeText(value, maxLen) {
-  const txt = String(value || "").replace(/\s+/g, " ").trim();
+  const txt = String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (txt.length <= maxLen) return txt;
   return txt.slice(0, maxLen).trim();
 }
@@ -117,13 +126,23 @@ export class AIService {
     this.keys = GEMINI_API_KEYS;
   }
 
-  async generateMetadata({ videoPath, brand, categoryId, extraContext = "", progressCallback }) {
+  async generateMetadata({
+    videoPath,
+    brand,
+    categoryId,
+    extraContext = "",
+    progressCallback,
+  }) {
     const effectiveCategory = categoryId || defaultContentTypeForBrand(brand);
     const fileHint = fromFilename(videoPath);
 
     if (this.keys.length === 0) {
       return {
-        titulo: `${FALLBACK_TITLES[effectiveCategory] || "Nuevo video"}: ${fileHint}`.slice(0, 90),
+        titulo:
+          `${FALLBACK_TITLES[effectiveCategory] || "Nuevo video"}: ${fileHint}`.slice(
+            0,
+            90,
+          ),
         descripcion: `Contenido sobre ${effectiveCategory.replace(/_/g, " ")} listo para publicar. 💥`,
         audio_clave: "",
         frase_audio_literal: "sin_voz_clara",
@@ -186,7 +205,8 @@ export class AIService {
                   {
                     fileData: {
                       fileUri: uploadedFile?.uri,
-                      mimeType: uploadedFile?.mimeType || inferMimeType(videoPath),
+                      mimeType:
+                        uploadedFile?.mimeType || inferMimeType(videoPath),
                     },
                   },
                   { text: prompt },
@@ -199,12 +219,24 @@ export class AIService {
           const parsed = JSON.parse(cleanJsonText(result.text));
 
           return {
-            titulo: sanitizeText(parsed.titulo || FALLBACK_TITLES[effectiveCategory] || fileHint, 90),
-            descripcion: sanitizeText(parsed.descripcion || `Contenido sobre ${effectiveCategory.replace(/_/g, " ")}.`, 280),
+            titulo: sanitizeText(
+              parsed.titulo || FALLBACK_TITLES[effectiveCategory] || fileHint,
+              90,
+            ),
+            descripcion: sanitizeText(
+              parsed.descripcion ||
+                `Contenido sobre ${effectiveCategory.replace(/_/g, " ")}.`,
+              280,
+            ),
             audio_clave: sanitizeText(parsed.audio_clave || "", 280),
-            frase_audio_literal: sanitizeText(parsed.frase_audio_literal || "sin_voz_clara", 280),
+            frase_audio_literal: sanitizeText(
+              parsed.frase_audio_literal || "sin_voz_clara",
+              280,
+            ),
             visual_clave: sanitizeText(parsed.visual_clave || "", 280),
-            category_id: sanitizeText(parsed.category_id || effectiveCategory, 60) || effectiveCategory,
+            category_id:
+              sanitizeText(parsed.category_id || effectiveCategory, 60) ||
+              effectiveCategory,
             model_used: friendlyModelName(modelName),
           };
         } catch (error) {
