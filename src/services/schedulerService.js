@@ -19,14 +19,64 @@ function parseSlot(slot) {
 }
 
 function toUtcIsoFromBrand(brand, dateObj) {
-  const locale = dateObj.toLocaleString("sv-SE", { timeZone: brandTimezone(brand) }).replace(" ", "T");
+  const locale = dateObj
+    .toLocaleString("sv-SE", { timeZone: brandTimezone(brand) })
+    .replace(" ", "T");
   const fakeLocal = new Date(locale);
   return fakeLocal.toISOString();
 }
 
 function nowInBrandTime(brand) {
-  const local = new Date().toLocaleString("sv-SE", { timeZone: brandTimezone(brand) }).replace(" ", "T");
+  const local = new Date()
+    .toLocaleString("sv-SE", { timeZone: brandTimezone(brand) })
+    .replace(" ", "T");
   return new Date(local);
+}
+
+const RESERVED_SLOTS = new Set();
+
+function brandMinuteKey(brand, dateObj) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: brandTimezone(brand),
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(dateObj);
+  const lookup = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+  return `${lookup.year}-${lookup.month}-${lookup.day} ${lookup.hour}:${lookup.minute}`;
+}
+
+function slotKey(brand, platform, dateObj) {
+  return `${brand}:${platform}:${brandMinuteKey(brand, dateObj)}`;
+}
+
+function slotTaken({ brand, platform, scheduledAt }) {
+  const targetKey = slotKey(brand, platform, scheduledAt);
+  if (RESERVED_SLOTS.has(targetKey)) return true;
+
+  const rows = db
+    .prepare(
+      `SELECT scheduled_at
+     FROM posts
+     WHERE brand = ?
+       AND platform = ?
+       AND status IN (${ACTIVE_POST_STATES.map(() => "?").join(",")})
+    `,
+    )
+    .all(brand, platform, ...ACTIVE_POST_STATES);
+
+  return rows.some(
+    (row) => slotKey(brand, platform, new Date(row.scheduled_at)) === targetKey,
+  );
+}
+
+function reserveSlot(brand, platform, dateObj) {
+  RESERVED_SLOTS.add(slotKey(brand, platform, dateObj));
 }
 
 export class SchedulerService {
@@ -45,9 +95,23 @@ export class SchedulerService {
     this._timer = null;
   }
 
-  getNextBestTime({ platform, after, contentType, brand, extraBrandDayCounts = {}, extraPlatformDayCounts = {}, searchDays = 120 }) {
-    const baseType = SCHEDULE_SLOTS[contentType] ? contentType : defaultContentTypeForBrand(brand);
-    const table = SCHEDULE_SLOTS[baseType]?.[platform] || SCHEDULE_SLOTS[baseType]?.tiktok || {};
+  getNextBestTime({
+    platform,
+    after,
+    contentType,
+    brand,
+    extraBrandDayCounts = {},
+    extraPlatformDayCounts = {},
+    searchDays = 120,
+    reserve = false,
+  }) {
+    const baseType = SCHEDULE_SLOTS[contentType]
+      ? contentType
+      : defaultContentTypeForBrand(brand);
+    const table =
+      SCHEDULE_SLOTS[baseType]?.[platform] ||
+      SCHEDULE_SLOTS[baseType]?.tiktok ||
+      {};
     const now = after ? new Date(after) : nowInBrandTime(brand);
 
     for (let daysAhead = 0; daysAhead < searchDays; daysAhead += 1) {
@@ -71,13 +135,23 @@ export class SchedulerService {
           extraPlatformDay: extraPlatformDayCounts[platKey] || 0,
         });
         if (!limit.allowed) continue;
+        if (slotTaken({ brand, platform, scheduledAt: local })) continue;
+        if (reserve) reserveSlot(brand, platform, local);
         return local;
       }
     }
-    throw new Error(`No hay horarios disponibles para ${platform} en ${brand} dentro de ${searchDays} días.`);
+    throw new Error(
+      `No hay horarios disponibles para ${platform} en ${brand} dentro de ${searchDays} días.`,
+    );
   }
 
-  checkDailyLimits({ brand, platform, scheduledAt, extraBrandDay = 0, extraPlatformDay = 0 }) {
+  checkDailyLimits({
+    brand,
+    platform,
+    scheduledAt,
+    extraBrandDay = 0,
+    extraPlatformDay = 0,
+  }) {
     const target = new Date(scheduledAt);
     const dayStart = new Date(target);
     dayStart.setHours(0, 0, 0, 0);
@@ -87,26 +161,43 @@ export class SchedulerService {
     const startIso = toUtcIsoFromBrand(brand, dayStart);
     const endIso = toUtcIsoFromBrand(brand, dayEnd);
 
-    const brandDayCount = db.prepare(`
+    const brandDayCount = db
+      .prepare(
+        `
       SELECT COUNT(*) AS total FROM posts
       WHERE brand = ? AND status IN (${ACTIVE_POST_STATES.map(() => "?").join(",")})
         AND scheduled_at >= ? AND scheduled_at < ?
-    `).get(brand, ...ACTIVE_POST_STATES, startIso, endIso).total;
+    `,
+      )
+      .get(brand, ...ACTIVE_POST_STATES, startIso, endIso).total;
 
     const brandLimit = DAILY_TOTAL_LIMITS[brand];
     if (brandLimit != null && brandDayCount + extraBrandDay >= brandLimit) {
-      return { allowed: false, error: `Límite diario alcanzado para ${brand}: máximo ${brandLimit} posts/día` };
+      return {
+        allowed: false,
+        error: `Límite diario alcanzado para ${brand}: máximo ${brandLimit} posts/día`,
+      };
     }
 
-    const platformDayCount = db.prepare(`
+    const platformDayCount = db
+      .prepare(
+        `
       SELECT COUNT(*) AS total FROM posts
       WHERE brand = ? AND platform = ? AND status IN (${ACTIVE_POST_STATES.map(() => "?").join(",")})
         AND scheduled_at >= ? AND scheduled_at < ?
-    `).get(brand, platform, ...ACTIVE_POST_STATES, startIso, endIso).total;
+    `,
+      )
+      .get(brand, platform, ...ACTIVE_POST_STATES, startIso, endIso).total;
 
     const platformLimit = DAILY_PLATFORM_LIMITS[brand]?.[platform];
-    if (platformLimit != null && platformDayCount + extraPlatformDay >= platformLimit) {
-      return { allowed: false, error: `Límite diario alcanzado para ${brand} en ${platform}: máximo ${platformLimit}/día` };
+    if (
+      platformLimit != null &&
+      platformDayCount + extraPlatformDay >= platformLimit
+    ) {
+      return {
+        allowed: false,
+        error: `Límite diario alcanzado para ${brand} en ${platform}: máximo ${platformLimit}/día`,
+      };
     }
 
     return { allowed: true, error: null };
@@ -118,8 +209,22 @@ export class SchedulerService {
       const slots = [];
       let after = null;
       for (let i = 0; i < 3; i += 1) {
-        const date = this.getNextBestTime({ platform, after, contentType, brand });
-        slots.push(date.toLocaleString("es-CO", { weekday: "long", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }));
+        const date = this.getNextBestTime({
+          platform,
+          after,
+          contentType,
+          brand,
+        });
+        slots.push(
+          date.toLocaleString("es-CO", {
+            weekday: "long",
+            day: "2-digit",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZone: brandTimezone(brand),
+          }),
+        );
         after = new Date(date.getTime() + 10 * 60 * 1000);
       }
       preview[platform] = slots;
@@ -130,9 +235,11 @@ export class SchedulerService {
   processDuePosts() {
     for (const brand of Object.keys(BRANDS)) {
       const now = new Date().toISOString();
-      const due = db.prepare(
-        `SELECT * FROM posts WHERE status = 'scheduled' AND brand = ? AND scheduled_at <= ?`
-      ).all(brand, now);
+      const due = db
+        .prepare(
+          `SELECT * FROM posts WHERE status = 'scheduled' AND brand = ? AND scheduled_at <= ?`,
+        )
+        .all(brand, now);
       for (const post of due) this.publishPost(post.id);
     }
   }
@@ -144,7 +251,7 @@ export class SchedulerService {
     db.prepare("UPDATE posts SET status = 'posting' WHERE id = ?").run(postId);
     const publishId = `demo-${post.platform}-${post.id}`;
     db.prepare(
-      "UPDATE posts SET status = 'published', posted_at = ?, platform_post_id = ?, error_message = NULL WHERE id = ?"
+      "UPDATE posts SET status = 'published', posted_at = ?, platform_post_id = ?, error_message = NULL WHERE id = ?",
     ).run(new Date().toISOString(), publishId, postId);
 
     const updated = db.prepare("SELECT * FROM posts WHERE id = ?").get(postId);

@@ -208,7 +208,9 @@ function requireAuth(req, res, next) {
 app.use(requireAuth);
 
 app.get("/favicon.ico", (_req, res) => {
-  return res.type("image/svg+xml").sendFile(path.join(FRONTEND_DIR, "static", "favicon.svg"));
+  return res
+    .type("image/svg+xml")
+    .sendFile(path.join(FRONTEND_DIR, "static", "favicon.svg"));
 });
 
 app.get("/", (req, res) => {
@@ -397,17 +399,18 @@ app.post("/api/videos/upload", upload.single("video"), (req, res) => {
   const ext = getExt(req.file.originalname);
   if (!ALLOWED_EXTENSIONS.has(ext)) {
     fs.unlinkSync(req.file.path);
-    return res
-      .status(400)
-      .json({
-        error: `Formato no permitido. Usa: ${Array.from(ALLOWED_EXTENSIONS).join(", ")}`,
-      });
+    return res.status(400).json({
+      error: `Formato no permitido. Usa: ${Array.from(ALLOWED_EXTENSIONS).join(", ")}`,
+    });
   }
 
   const brand = authBrand(req) || "gymark";
-  let categoryId = String(req.body?.category_id || "").trim();
+  const requestedCategory = String(req.body?.category_id || "").trim();
+  let categoryId = requestedCategory;
   const allowed = new Set(BRAND_CATEGORIES[brand] || []);
-  if (!categoryId) categoryId = defaultContentTypeForBrand(brand);
+  // For Gymark keep category empty until AI classifies the video.
+  if (!categoryId && brand !== "gymark")
+    categoryId = defaultContentTypeForBrand(brand);
   if (categoryId && !allowed.has(categoryId))
     categoryId = defaultContentTypeForBrand(brand);
 
@@ -561,11 +564,17 @@ app.post("/api/ai/generate", async (req, res) => {
   }
 
   const allowedCategories = new Set(BRAND_CATEGORIES[resolvedBrand] || []);
-  let resolvedCategory =
-    String(categoryId || "").trim() ||
-    defaultContentTypeForBrand(resolvedBrand);
-  if (!allowedCategories.has(resolvedCategory))
+  const requestedCategory = String(categoryId || "").trim();
+  const shouldInferGymarkCategory =
+    resolvedBrand === "gymark" && !requestedCategory;
+
+  let resolvedCategory = requestedCategory;
+  if (resolvedCategory && !allowedCategories.has(resolvedCategory)) {
     resolvedCategory = defaultContentTypeForBrand(resolvedBrand);
+  }
+  if (!resolvedCategory && !shouldInferGymarkCategory) {
+    resolvedCategory = defaultContentTypeForBrand(resolvedBrand);
+  }
 
   setAiStatus(requestId, {
     status: "processing",
@@ -577,17 +586,24 @@ app.post("/api/ai/generate", async (req, res) => {
     const result = await aiService.generateMetadata({
       videoPath: video.source_file_path || video.file_path,
       brand: resolvedBrand,
-      categoryId: resolvedCategory,
+      categoryId: shouldInferGymarkCategory ? "" : resolvedCategory,
       progressCallback: (model, phase) =>
         setAiStatus(requestId, { status: "processing", model, phase }),
     });
+
+    const finalCategoryRaw = shouldInferGymarkCategory
+      ? String(result.category_id || "").trim()
+      : resolvedCategory;
+    const finalCategory = allowedCategories.has(finalCategoryRaw)
+      ? finalCategoryRaw
+      : defaultContentTypeForBrand(resolvedBrand);
 
     db.prepare(
       "UPDATE videos SET ai_title = ?, ai_description = ?, category_id = ?, brand = ? WHERE id = ?",
     ).run(
       result.titulo || "",
       result.descripcion || "",
-      resolvedCategory,
+      finalCategory,
       resolvedBrand,
       video.id,
     );
@@ -600,7 +616,7 @@ app.post("/api/ai/generate", async (req, res) => {
         video.id,
       );
 
-    const hashtags = hashtagService.getHashtags(resolvedCategory, "tiktok", {
+    const hashtags = hashtagService.getHashtags(finalCategory, "tiktok", {
       brand: resolvedBrand,
     });
     setAiStatus(requestId, {
@@ -612,7 +628,7 @@ app.post("/api/ai/generate", async (req, res) => {
     return res.json({
       ...result,
       hashtags,
-      category_id: resolvedCategory,
+      category_id: finalCategory,
       brand: resolvedBrand,
     });
   } catch (error) {
@@ -681,32 +697,26 @@ app.post("/api/posts/schedule", (req, res) => {
   const allowedPlatforms = new Set(BRANDS[brand]?.platforms || []);
   const invalid = platforms.filter((p) => !allowedPlatforms.has(p));
   if (invalid.length)
-    return res
-      .status(400)
-      .json({
-        error: `Plataformas no permitidas para ${brand}: ${invalid.join(", ")}`,
-      });
+    return res.status(400).json({
+      error: `Plataformas no permitidas para ${brand}: ${invalid.join(", ")}`,
+    });
 
   let contentType = String(body.content_type || "").trim();
   if (brand === "gymark") {
     contentType = String(video.category_id || "").trim();
     if (!contentType)
-      return res
-        .status(400)
-        .json({
-          error:
-            "Este video de Gymark no tiene categoría detectada por IA. Analízalo con IA antes de programar.",
-        });
+      return res.status(400).json({
+        error:
+          "Este video de Gymark no tiene categoría detectada por IA. Analízalo con IA antes de programar.",
+      });
   }
   if (!contentType) contentType = defaultContentTypeForBrand(brand);
 
   const allowedCategories = new Set(BRAND_CATEGORIES[brand] || []);
   if (!allowedCategories.has(contentType)) {
-    return res
-      .status(400)
-      .json({
-        error: `Categoría '${contentType}' no permitida para la marca ${brand}`,
-      });
+    return res.status(400).json({
+      error: `Categoría '${contentType}' no permitida para la marca ${brand}`,
+    });
   }
 
   const autoTime =
@@ -723,6 +733,7 @@ app.post("/api/posts/schedule", (req, res) => {
           platform,
           contentType,
           brand,
+          reserve: true,
         });
       } catch (error) {
         return res.status(400).json({ error: String(error.message || error) });
@@ -895,8 +906,12 @@ app.get("/api/hashtags/suggest", (req, res) => {
   if (!(BRAND_CATEGORIES[brand] || []).includes(contentType))
     contentType = defaultType;
   const platform = String(req.query.platform || "tiktok");
+  const hashtags = hashtagService.getHashtags(contentType, platform, { brand });
   return res.json({
-    hashtags: hashtagService.getHashtags(contentType, platform, { brand }),
+    hashtags,
+    hashtags_joined: hashtagService.getHashtagsJoined(contentType, platform, {
+      brand,
+    }),
   });
 });
 

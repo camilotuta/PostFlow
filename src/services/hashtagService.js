@@ -1,4 +1,9 @@
-import { HASHTAGS, GYMARK_VIRAL_HASHTAGS, CONTENT_TYPES, defaultContentTypeForBrand } from "../config.js";
+import {
+  HASHTAGS,
+  GYMARK_VIRAL_HASHTAGS,
+  CONTENT_TYPES,
+  defaultContentTypeForBrand,
+} from "../config.js";
 
 function dedupe(items) {
   const seen = new Set();
@@ -18,20 +23,46 @@ function normalizeHashtag(tag) {
   return text.startsWith("#") ? text : `#${text}`;
 }
 
+function joinHashtags(tags) {
+  return (Array.isArray(tags) ? tags : [])
+    .map(normalizeHashtag)
+    .filter(Boolean)
+    .join("");
+}
+
 export class HashtagService {
   getHashtags(contentType, platform, { brand, count } = {}) {
     const fallbackType = defaultContentTypeForBrand(brand);
     const effectiveType = HASHTAGS[contentType] ? contentType : fallbackType;
 
     let fixed = [...(HASHTAGS[effectiveType] || HASHTAGS[fallbackType] || [])];
-    if (brand === "gymark") fixed = dedupe([...fixed, ...GYMARK_VIRAL_HASHTAGS]);
+    if (brand === "gymark")
+      fixed = dedupe([...fixed, ...GYMARK_VIRAL_HASHTAGS]);
 
     let limit = Number.isFinite(Number(count)) ? Number(count) : null;
-    if (limit == null && platform === "tiktok" && (brand === "tatuct" || brand === "milita")) limit = 12;
-    if (limit == null && brand === "escape") limit = platform === "tiktok" ? 12 : platform === "instagram" ? 10 : fixed.length;
+    if (
+      limit == null &&
+      platform === "tiktok" &&
+      (brand === "tatuct" || brand === "milita")
+    )
+      limit = 12;
+    if (limit == null && brand === "escape")
+      limit =
+        platform === "tiktok"
+          ? 12
+          : platform === "instagram"
+            ? 10
+            : fixed.length;
     if (limit == null) limit = fixed.length;
 
-    return fixed.slice(0, Math.max(1, limit)).map(normalizeHashtag).filter(Boolean);
+    return fixed
+      .slice(0, Math.max(1, limit))
+      .map(normalizeHashtag)
+      .filter(Boolean);
+  }
+
+  getHashtagsJoined(contentType, platform, opts = {}) {
+    return joinHashtags(this.getHashtags(contentType, platform, opts));
   }
 
   getContentTypes() {

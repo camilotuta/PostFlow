@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { DATABASE_PATH } from "./config.js";
+import { DATABASE_PATH, TIMEZONE } from "./config.js";
 
 fs.mkdirSync(path.dirname(DATABASE_PATH), { recursive: true });
 
@@ -138,10 +138,15 @@ export function formatDateTime(value) {
   const dt = raw.endsWith("Z") ? new Date(raw) : new Date(raw);
   if (Number.isNaN(dt.getTime()))
     return String(value).slice(0, 16).replace("T", " ");
-  const year = dt.getUTCFullYear();
-  const month = String(dt.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(dt.getUTCDate()).padStart(2, "0");
-  const hour = String(dt.getUTCHours()).padStart(2, "0");
-  const minute = String(dt.getUTCMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day} ${hour}:${minute}`;
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+    .format(dt)
+    .replace(" ", " ");
 }

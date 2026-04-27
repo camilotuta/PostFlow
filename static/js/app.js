@@ -16,56 +16,58 @@ let authRedirecting = false;
 
 const PERFECT_WINDOWS = {
   gaming: {
-    tiktok:
-      "TikTok · COT · Mar 20:00 · Mié 21:00 · Jue 19:30 / 23:00 · Vie 20:00 · Sáb 20:00 / 22:00",
-    youtube_shorts:
-      "YouTube Shorts · COT · Mar 20:00 · Jue 19:30 / 23:00 · Vie 20:00 · Sáb 20:00 / 22:00",
+    tiktok: "TikTok · Lun-Dom · 12:00 + 17:00/19:00 (según día)",
+    youtube_shorts: "YouTube Shorts · Lun-Dom · 17:00/19:00 (según día)",
   },
   acc_gimnasio: {
-    tiktok: "TikTok · COT · Mar / Jue 20:00",
-    instagram: "Instagram · COT · Mar / Jue 12:00 y 19:00",
-    facebook: "Facebook · COT · Mar / Jue 12:00 y 19:00",
-    youtube_shorts: "YouTube Shorts · COT · Mar / Vie 12:00",
+    tiktok: "TikTok · Lun-Dom · 06:00/12:00/17:00/19:00 (según día)",
+    instagram: "Instagram · Mar/Mié/Jue/Vie/Dom · 12:00/17:00/19:00",
+    facebook: "Facebook · Lun/Jue/Vie/Sáb/Dom · 17:00/19:00",
+    youtube_shorts:
+      "YouTube Shorts · Lun/Mar/Mié/Jue/Sáb/Dom · 06:00/17:00/19:00",
   },
   pilates_yoga: {
-    tiktok: "TikTok · COT · Mié / Sáb 19:30",
-    instagram: "Instagram · COT · Mié / Sáb 11:00 y 19:00",
-    facebook: "Facebook · COT · Mié / Sáb 09:00 y 19:00",
-    youtube_shorts: "YouTube Shorts · COT · Sáb 09:00 y 10:00",
+    tiktok: "TikTok · Lun-Dom · 06:00/12:00/17:00/19:00 (según día)",
+    instagram: "Instagram · Mar/Mié/Jue/Vie/Dom · 12:00/17:00/19:00",
+    facebook: "Facebook · Lun/Jue/Vie/Sáb/Dom · 17:00/19:00",
+    youtube_shorts:
+      "YouTube Shorts · Lun/Mar/Mié/Jue/Sáb/Dom · 06:00/17:00/19:00",
   },
   sup_naturales: {
-    tiktok: "TikTok · COT · Mar / Mié 20:00",
-    instagram: "Instagram · COT · Mar / Mié 11:00 y 19:00",
-    facebook: "Facebook · COT · Mar / Mié 09:00 y 19:00",
-    youtube_shorts: "YouTube Shorts · COT · Mar / Mié 09:00",
+    tiktok: "TikTok · Lun-Dom · 06:00/12:00/17:00/19:00 (según día)",
+    instagram: "Instagram · Mar/Mié/Jue/Vie/Dom · 12:00/17:00/19:00",
+    facebook: "Facebook · Lun/Jue/Vie/Sáb/Dom · 17:00/19:00",
+    youtube_shorts:
+      "YouTube Shorts · Lun/Mar/Mié/Jue/Sáb/Dom · 06:00/17:00/19:00",
   },
   ropa_deportiva: {
-    tiktok: "TikTok · COT · Mar / Jue 20:00",
-    instagram: "Instagram · COT · Mar / Jue 12:00 y 19:00",
-    facebook: "Facebook · COT · Mar / Jue 12:00 y 19:00",
-    youtube_shorts: "YouTube Shorts · COT · Mar / Vie 12:00",
+    tiktok: "TikTok · Lun-Dom · 06:00/12:00/17:00/19:00 (según día)",
+    instagram: "Instagram · Mar/Mié/Jue/Vie/Dom · 12:00/17:00/19:00",
+    facebook: "Facebook · Lun/Jue/Vie/Sáb/Dom · 17:00/19:00",
+    youtube_shorts:
+      "YouTube Shorts · Lun/Mar/Mié/Jue/Sáb/Dom · 06:00/17:00/19:00",
   },
   sup_deportivos: {
-    tiktok: "TikTok · COT · Mar / Mié 20:00",
-    instagram: "Instagram · COT · Mar / Mié 11:00 y 19:00",
-    facebook: "Facebook · COT · Mar / Mié 09:00 y 19:00",
-    youtube_shorts: "YouTube Shorts · COT · Mar / Mié 09:00",
+    tiktok: "TikTok · Lun-Dom · 06:00/12:00/17:00/19:00 (según día)",
+    instagram: "Instagram · Mar/Mié/Jue/Vie/Dom · 12:00/17:00/19:00",
+    facebook: "Facebook · Lun/Jue/Vie/Sáb/Dom · 17:00/19:00",
+    youtube_shorts:
+      "YouTube Shorts · Lun/Mar/Mié/Jue/Sáb/Dom · 06:00/17:00/19:00",
   },
   home_gym: {
-    tiktok: "TikTok · COT · Jue / Vie 19:30",
-    instagram: "Instagram · COT · Jue / Vie 12:00 y 19:30",
-    facebook: "Facebook · COT · Jue / Vie 12:00 y 19:00",
-    youtube_shorts: "YouTube Shorts · COT · Mié / Vie 19:30",
+    tiktok: "TikTok · Lun-Dom · 06:00/12:00/17:00/19:00 (según día)",
+    instagram: "Instagram · Mar/Mié/Jue/Vie/Dom · 12:00/17:00/19:00",
+    facebook: "Facebook · Lun/Jue/Vie/Sáb/Dom · 17:00/19:00",
+    youtube_shorts:
+      "YouTube Shorts · Lun/Mar/Mié/Jue/Sáb/Dom · 06:00/17:00/19:00",
   },
   milita_beauty: {
-    tiktok:
-      "TikTok · CST México · Mar 09:00 / 13:00 · Mié 10:00 · Jue 19:30 · Vie 10:00 / 19:30 · Dom 10:00",
+    tiktok: "TikTok · Lun-Dom · 10:00/12:00/18:00 (según día)",
+    instagram: "Instagram · Mar/Mié/Jue/Sáb/Dom · 10:00/12:00/18:00",
   },
   escape_proctoring: {
-    tiktok:
-      "TikTok · EST · Mar 10:00 / 19:30 · Mié 11:00 / 20:00 · Jue 09:00 / 19:30 · Vie 12:00 / 20:00 · Sáb 10:00",
-    instagram:
-      "Instagram Reels · EST · Mar 11:00 / 19:30 · Mié 11:00 / 20:00 · Jue 11:00 / 19:30 · Vie 12:00 / 20:00 · Sáb 10:00",
+    tiktok: "TikTok · Lun-Dom · 09:00/14:00/18:00 (según día)",
+    instagram: "Instagram Reels · Lun-Sáb · 09:00/14:00/18:00 (según día)",
   },
 };
 
@@ -341,7 +343,7 @@ async function updateUploadCategories(bKey) {
 async function initUploadBrandSelector() {
   const container = document.getElementById("uploadBrandBtns");
   if (!container) return;
-  // Load brands if not yet loaded
+
   if (!brandsData.length) {
     try {
       brandsData = await get("/api/brands");
@@ -354,7 +356,6 @@ async function initUploadBrandSelector() {
     uploadBrand = brandsData[0].key;
   }
 
-  // Render once (check if already rendered)
   updateUploadCategories(uploadBrand);
   if (container.childElementCount !== brandsData.length) {
     container.innerHTML = brandsData
@@ -2275,7 +2276,7 @@ function normalizeHashtags(list) {
 function buildPlatformCaption(post) {
   const base = String(post?.description || "").trim();
   const tags = normalizeHashtags(post?.hashtags || []);
-  const hashtagsLine = tags.join(" ").trim();
+  const hashtagsLine = tags.join("").trim();
   const platform = String(post?.platform || "").toLowerCase();
 
   if (!hashtagsLine) return base;

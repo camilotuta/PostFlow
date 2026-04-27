@@ -14,6 +14,99 @@ const FALLBACK_TITLES = {
   escape_proctoring: "Lo que debes saber antes del examen",
 };
 
+const GYMARK_ALLOWED_CATEGORIES = new Set([
+  "acc_gimnasio",
+  "pilates_yoga",
+  "sup_naturales",
+  "ropa_deportiva",
+  "sup_deportivos",
+  "home_gym",
+]);
+
+const GYMARK_CATEGORY_KEYWORDS = {
+  acc_gimnasio: [
+    "accesorio",
+    "accesorios",
+    "mancuerna",
+    "mancuernas",
+    "banda",
+    "bandas",
+    "liga",
+    "ligas",
+    "colchoneta",
+    "tapete",
+    "botella",
+    "shaker",
+    "strap",
+    "cinturon",
+    "guantes",
+    "rodillera",
+    "munequera",
+  ],
+  pilates_yoga: [
+    "pilates",
+    "yoga",
+    "asana",
+    "namaste",
+    "mat",
+    "bloque",
+    "postura",
+    "estiramiento",
+    "movilidad",
+    "respiracion",
+  ],
+  sup_naturales: [
+    "natural",
+    "naturales",
+    "organico",
+    "herbal",
+    "vitamina",
+    "vitaminas",
+    "omega",
+    "ashwagandha",
+    "colageno",
+    "bienestar",
+    "inmunidad",
+  ],
+  ropa_deportiva: [
+    "ropa",
+    "outfit",
+    "leggings",
+    "top",
+    "short",
+    "sudadera",
+    "tenis",
+    "camiseta",
+    "prenda",
+    "activewear",
+  ],
+  sup_deportivos: [
+    "proteina",
+    "whey",
+    "creatina",
+    "preentreno",
+    "pre entreno",
+    "bcaa",
+    "aminoacidos",
+    "suplemento",
+    "suplementos",
+    "postentreno",
+    "post entreno",
+  ],
+  home_gym: [
+    "home gym",
+    "gimnasio en casa",
+    "rack",
+    "banca",
+    "barra",
+    "discos",
+    "soporte",
+    "maquina",
+    "multifuncional",
+    "casa",
+  ],
+};
+
 function fromFilename(filePath) {
   const base = path
     .basename(filePath)
@@ -51,6 +144,48 @@ function cleanJsonText(text) {
     .trim()
     .replace(JSON_FENCE_RE, "")
     .trim();
+}
+
+function normalizeText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function inferGymarkCategoryFromSignals(payload, fallback) {
+  const suggested = sanitizeText(payload?.category_id || "", 60);
+  if (GYMARK_ALLOWED_CATEGORIES.has(suggested)) return suggested;
+
+  const text = normalizeText(
+    [
+      payload?.titulo,
+      payload?.descripcion,
+      payload?.audio_clave,
+      payload?.frase_audio_literal,
+      payload?.visual_clave,
+    ].join(" "),
+  );
+  if (!text) return fallback;
+
+  let bestCategory = fallback;
+  let bestScore = 0;
+
+  for (const [category, keywords] of Object.entries(GYMARK_CATEGORY_KEYWORDS)) {
+    let score = 0;
+    for (const keyword of keywords) {
+      if (text.includes(keyword)) score += 1;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestCategory = category;
+    }
+  }
+
+  return bestCategory;
 }
 
 function buildBrandContext(brand) {
@@ -218,6 +353,12 @@ export class AIService {
 
           const parsed = JSON.parse(cleanJsonText(result.text));
 
+          const resolvedCategory =
+            brand === "gymark" && !String(categoryId || "").trim()
+              ? inferGymarkCategoryFromSignals(parsed, effectiveCategory)
+              : sanitizeText(parsed.category_id || effectiveCategory, 60) ||
+                effectiveCategory;
+
           return {
             titulo: sanitizeText(
               parsed.titulo || FALLBACK_TITLES[effectiveCategory] || fileHint,
@@ -234,9 +375,7 @@ export class AIService {
               280,
             ),
             visual_clave: sanitizeText(parsed.visual_clave || "", 280),
-            category_id:
-              sanitizeText(parsed.category_id || effectiveCategory, 60) ||
-              effectiveCategory,
+            category_id: resolvedCategory,
             model_used: friendlyModelName(modelName),
           };
         } catch (error) {
