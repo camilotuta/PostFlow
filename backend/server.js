@@ -722,6 +722,7 @@ app.post("/api/posts/schedule", (req, res) => {
     body.auto_time ?? String(body.schedule_mode || "auto") !== "manual";
   const manualDt = body.scheduled_at || body.post_date || null;
   const created = [];
+  const reservation = new Set();
 
   for (const platform of platforms) {
     let scheduledAt = null;
@@ -733,6 +734,7 @@ app.post("/api/posts/schedule", (req, res) => {
           contentType,
           brand,
           reserve: true,
+          reservation,
         });
       } catch (error) {
         return res.status(400).json({ error: String(error.message || error) });
@@ -790,6 +792,7 @@ app.delete("/api/posts/clear", (req, res) => {
   const deleted = db
     .prepare("DELETE FROM posts WHERE brand = ?")
     .run(brand).changes;
+  scheduler.clearReservedSlots(brand);
   return res.json({ message: `${deleted} posts eliminados`, deleted });
 });
 

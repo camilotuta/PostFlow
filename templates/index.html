@@ -340,8 +340,9 @@
             Sube tus Videos
           </h3>
           <p class="card__desc">
-            Selecciona varios videos a la vez · Formatos: MP4, MOV, AVI, MKV,
-            WEBM · Máx. 500 MB por video
+            Sube videos o imágenes (un set de fotos = 1 carrusel) · Videos: MP4,
+            MOV, AVI, MKV, WEBM (máx 500 MB) · Imágenes: JPG, PNG, WEBP, HEIC,
+            GIF (máx 50 MB c/u, hasta 20 por carrusel)
           </p>
 
           <!-- Selector de marca e IA -->
@@ -379,14 +380,15 @@
                 <path d="m8 16 4-4 4 4" />
               </svg>
             </div>
-            <div class="drop-zone__text">Arrastra uno o varios videos aquí</div>
+            <div class="drop-zone__text">Arrastra videos o imágenes aquí</div>
             <div class="drop-zone__sub">
-              o haz clic para seleccionar (puedes elegir varios)
+              Videos: 1 archivo = 1 post · Imágenes: si sueltas varias a la vez
+              se agrupan como un carrusel
             </div>
             <input
               type="file"
               id="videoFileInput"
-              accept="video/*"
+              accept="video/*,image/*"
               multiple
               hidden
             />

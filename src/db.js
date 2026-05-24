@@ -68,6 +68,9 @@ export function initDb() {
     ["category_id", "TEXT"],
     ["ai_title", "TEXT"],
     ["ai_description", "TEXT"],
+    ["media_kind", "TEXT DEFAULT 'video'"],
+    ["image_paths", "TEXT"],
+    ["image_count", "INTEGER DEFAULT 0"],
   ]);
 
   ensureColumns("posts", [
@@ -87,6 +90,18 @@ export function rowToVideo(row, posts = []) {
     return null;
   };
 
+  let imagePaths = [];
+  if (row.image_paths) {
+    try {
+      const parsed = JSON.parse(row.image_paths);
+      if (Array.isArray(parsed)) imagePaths = parsed.filter(Boolean);
+    } catch {
+      imagePaths = [];
+    }
+  }
+  const imageUrls = imagePaths.map(toUrl).filter(Boolean);
+  const mediaKind = row.media_kind || (imagePaths.length ? "image" : "video");
+
   return {
     id: row.id,
     filename: row.filename,
@@ -99,8 +114,14 @@ export function rowToVideo(row, posts = []) {
     category_id: row.category_id || null,
     ai_title: row.ai_title || null,
     ai_description: row.ai_description || null,
-    video_url: toUrl(selectedPath),
-    source_video_url: toUrl(row.source_file_path || row.file_path),
+    media_kind: mediaKind,
+    image_count: row.image_count || imagePaths.length || 0,
+    image_urls: imageUrls,
+    video_url: mediaKind === "video" ? toUrl(selectedPath) : null,
+    source_video_url:
+      mediaKind === "video"
+        ? toUrl(row.source_file_path || row.file_path)
+        : null,
     is_customized: Boolean(row.processed_file_path),
     posts,
   };

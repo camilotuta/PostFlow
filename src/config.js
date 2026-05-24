@@ -25,7 +25,17 @@ export const PUBLIC_BASE_URL =
     ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
     : "http://localhost:5000");
 export const MAX_VIDEO_MB = 500;
+export const MAX_IMAGE_MB = 50;
+export const MAX_IMAGES_PER_CAROUSEL = 20;
 export const ALLOWED_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm"]);
+export const ALLOWED_IMAGE_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "heic",
+  "gif",
+]);
 
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const defaultGeminiKeys = [
@@ -88,9 +98,9 @@ export const BRAND_CATEGORIES = {
 
 export const BRAND_LOGIN_PASSWORDS = {
   gymark: process.env.GYMARK_LOGIN_PASSWORD || "gymark",
-  tatuct: process.env.TATUCT_LOGIN_PASSWORD || "123",
-  milita: process.env.MILITA_LOGIN_PASSWORD || "camilo",
-  escape: process.env.ESCAPE_LOGIN_PASSWORD || "escapetopuria",
+  tatuct: process.env.TATUCT_LOGIN_PASSWORD || "tatuct",
+  milita: process.env.MILITA_LOGIN_PASSWORD || "milita",
+  escape: process.env.ESCAPE_LOGIN_PASSWORD || "escape",
 };
 
 const calToken = (brand) =>

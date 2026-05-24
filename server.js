@@ -10,12 +10,15 @@ import session from "express-session";
 import nunjucks from "nunjucks";
 import {
   ALLOWED_EXTENSIONS,
+  ALLOWED_IMAGE_EXTENSIONS,
   BASE_DIR,
   BRANDS,
   BRAND_CATEGORIES,
   BRAND_CALENDAR_TOKENS,
   BRAND_LOGIN_PASSWORDS,
   MAX_VIDEO_MB,
+  MAX_IMAGE_MB,
+  MAX_IMAGES_PER_CAROUSEL,
   SECRET_KEY,
   FRONTEND_DIR,
   THUMBS_DIR,
@@ -83,6 +86,15 @@ const upload = multer({
   storage,
   limits: { fileSize: MAX_VIDEO_MB * 1024 * 1024 },
 });
+
+// Acepta videos (campo 'video') o imágenes (campo 'images[]') en el mismo endpoint.
+const mediaUpload = multer({
+  storage,
+  limits: { fileSize: MAX_VIDEO_MB * 1024 * 1024 },
+}).fields([
+  { name: "video", maxCount: 1 },
+  { name: "images", maxCount: MAX_IMAGES_PER_CAROUSEL },
+]);
 
 const brandAssetUpload = multer({
   storage: multer.memoryStorage(),
@@ -392,60 +404,160 @@ app.get("/api/videos", (req, res) => {
   res.json(payload);
 });
 
-app.post("/api/videos/upload", upload.single("video"), (req, res) => {
-  if (!req.file)
-    return res.status(400).json({ error: "No se encontró el campo 'video'" });
+app.post("/api/videos/upload", mediaUpload, (req, res) => {
+  const videoFile = req.files?.video?.[0] || null;
+  const imageFiles = Array.isArray(req.files?.images) ? req.files.images : [];
 
-  const ext = getExt(req.file.originalname);
-  if (!ALLOWED_EXTENSIONS.has(ext)) {
-    fs.unlinkSync(req.file.path);
-    return res.status(400).json({
-      error: `Formato no permitido. Usa: ${Array.from(ALLOWED_EXTENSIONS).join(", ")}`,
-    });
+  if (!videoFile && imageFiles.length === 0) {
+    return res
+      .status(400)
+      .json({
+        error: "No se encontró ningún archivo (campo 'video' o 'images')",
+      });
+  }
+  if (videoFile && imageFiles.length > 0) {
+    // Limpia para evitar dejar archivos huérfanos
+    try {
+      fs.unlinkSync(videoFile.path);
+    } catch {}
+    for (const f of imageFiles) {
+      try {
+        fs.unlinkSync(f.path);
+      } catch {}
+    }
+    return res
+      .status(400)
+      .json({
+        error: "Envía un video O imágenes, no ambos en el mismo upload",
+      });
   }
 
   const brand = authBrand(req) || "gymark";
   const requestedCategory = String(req.body?.category_id || "").trim();
   let categoryId = requestedCategory;
   const allowed = new Set(BRAND_CATEGORIES[brand] || []);
-  // For Gymark keep category empty until AI classifies the video.
   if (!categoryId && brand !== "gymark")
     categoryId = defaultContentTypeForBrand(brand);
   if (categoryId && !allowed.has(categoryId))
     categoryId = defaultContentTypeForBrand(brand);
 
-  const fileSize = req.file.size || 0;
-  const duration = ffprobeDuration(req.file.path);
-  const thumb = generateThumb(
-    req.file.path,
-    path.basename(req.file.filename, path.extname(req.file.filename)),
-  );
+  // ── VIDEO ────────────────────────────────────────────────────────────
+  if (videoFile) {
+    const ext = getExt(videoFile.originalname);
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+      try {
+        fs.unlinkSync(videoFile.path);
+      } catch {}
+      return res.status(400).json({
+        error: `Formato de video no permitido. Usa: ${Array.from(ALLOWED_EXTENSIONS).join(", ")}`,
+      });
+    }
 
-  const result = db
+    const fileSize = videoFile.size || 0;
+    const duration = ffprobeDuration(videoFile.path);
+    const thumb = generateThumb(
+      videoFile.path,
+      path.basename(videoFile.filename, path.extname(videoFile.filename)),
+    );
+
+    const result = db
+      .prepare(
+        `
+      INSERT INTO videos (filename, original_name, brand, file_path, source_file_path, file_size, duration, thumbnail, category_id, media_kind, image_count, uploaded_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'video', 0, ?)
+    `,
+      )
+      .run(
+        videoFile.filename,
+        videoFile.originalname,
+        brand,
+        videoFile.path,
+        videoFile.path,
+        fileSize,
+        duration,
+        thumb,
+        categoryId,
+        new Date().toISOString(),
+      );
+
+    const video = db
+      .prepare("SELECT * FROM videos WHERE id = ?")
+      .get(result.lastInsertRowid);
+    const payload = rowToVideo(video, []);
+    payload.metadata_stripped = true;
+    return res.status(201).json(payload);
+  }
+
+  // ── IMÁGENES (1 o más → carrusel) ────────────────────────────────────
+  if (imageFiles.length > MAX_IMAGES_PER_CAROUSEL) {
+    for (const f of imageFiles) {
+      try {
+        fs.unlinkSync(f.path);
+      } catch {}
+    }
+    return res.status(400).json({
+      error: `Máximo ${MAX_IMAGES_PER_CAROUSEL} imágenes por carrusel`,
+    });
+  }
+  for (const f of imageFiles) {
+    const ext = getExt(f.originalname);
+    if (!ALLOWED_IMAGE_EXTENSIONS.has(ext)) {
+      for (const x of imageFiles) {
+        try {
+          fs.unlinkSync(x.path);
+        } catch {}
+      }
+      return res.status(400).json({
+        error: `Formato de imagen no permitido (${ext}). Usa: ${Array.from(ALLOWED_IMAGE_EXTENSIONS).join(", ")}`,
+      });
+    }
+    if ((f.size || 0) > MAX_IMAGE_MB * 1024 * 1024) {
+      for (const x of imageFiles) {
+        try {
+          fs.unlinkSync(x.path);
+        } catch {}
+      }
+      return res.status(400).json({
+        error: `La imagen '${f.originalname}' supera ${MAX_IMAGE_MB} MB`,
+      });
+    }
+  }
+
+  const imagePaths = imageFiles.map((f) => f.path);
+  const totalSize = imageFiles.reduce((acc, f) => acc + (f.size || 0), 0);
+  const firstFile = imageFiles[0];
+  // Como thumb del carrusel reutilizamos la primera imagen (servida desde /static/uploads).
+  // Para HEIC el navegador no podrá mostrarla; el front mostrará un placeholder.
+  const firstUrl = `/static/uploads/${firstFile.filename}`;
+
+  const insert = db
     .prepare(
       `
-    INSERT INTO videos (filename, original_name, brand, file_path, source_file_path, file_size, duration, thumbnail, category_id, uploaded_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO videos (filename, original_name, brand, file_path, source_file_path, file_size, duration, thumbnail, category_id, media_kind, image_paths, image_count, uploaded_at)
+    VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'image', ?, ?, ?)
   `,
     )
     .run(
-      req.file.filename,
-      req.file.originalname,
+      firstFile.filename,
+      imageFiles.length > 1
+        ? `Carrusel (${imageFiles.length}) · ${firstFile.originalname}`
+        : firstFile.originalname,
       brand,
-      req.file.path,
-      req.file.path,
-      fileSize,
-      duration,
-      thumb,
+      firstFile.path,
+      firstFile.path,
+      totalSize,
+      firstUrl,
       categoryId,
+      JSON.stringify(imagePaths),
+      imageFiles.length,
       new Date().toISOString(),
     );
 
-  const video = db
+  const row = db
     .prepare("SELECT * FROM videos WHERE id = ?")
-    .get(result.lastInsertRowid);
-  const payload = rowToVideo(video, []);
-  payload.metadata_stripped = true;
+    .get(insert.lastInsertRowid);
+  const payload = rowToVideo(row, []);
+  payload.metadata_stripped = false;
   return res.status(201).json(payload);
 });
 
@@ -467,6 +579,21 @@ app.delete("/api/videos/:id", (req, res) => {
         fs.unlinkSync(disk);
       } catch {}
     }
+  }
+  // Borra todas las imágenes del carrusel (si aplica)
+  if (video.image_paths) {
+    try {
+      const list = JSON.parse(video.image_paths);
+      if (Array.isArray(list)) {
+        for (const p of list) {
+          if (p && fs.existsSync(p)) {
+            try {
+              fs.unlinkSync(p);
+            } catch {}
+          }
+        }
+      }
+    } catch {}
   }
   if (video.thumbnail) {
     const thumbPath = path.join(BASE_DIR, video.thumbnail.replace(/^\//, ""));
@@ -583,13 +710,32 @@ app.post("/api/ai/generate", async (req, res) => {
   });
 
   try {
-    const result = await aiService.generateMetadata({
-      videoPath: video.source_file_path || video.file_path,
-      brand: resolvedBrand,
-      categoryId: shouldInferGymarkCategory ? "" : resolvedCategory,
-      progressCallback: (model, phase) =>
-        setAiStatus(requestId, { status: "processing", model, phase }),
-    });
+    const mediaKind = video.media_kind || "video";
+    let result;
+    if (mediaKind === "image") {
+      let imagePaths = [];
+      try {
+        const parsed = JSON.parse(video.image_paths || "[]");
+        if (Array.isArray(parsed)) imagePaths = parsed.filter(Boolean);
+      } catch {}
+      if (imagePaths.length === 0 && video.file_path)
+        imagePaths = [video.file_path];
+      result = await aiService.generateImageMetadata({
+        imagePaths,
+        brand: resolvedBrand,
+        categoryId: shouldInferGymarkCategory ? "" : resolvedCategory,
+        progressCallback: (model, phase) =>
+          setAiStatus(requestId, { status: "processing", model, phase }),
+      });
+    } else {
+      result = await aiService.generateMetadata({
+        videoPath: video.source_file_path || video.file_path,
+        brand: resolvedBrand,
+        categoryId: shouldInferGymarkCategory ? "" : resolvedCategory,
+        progressCallback: (model, phase) =>
+          setAiStatus(requestId, { status: "processing", model, phase }),
+      });
+    }
 
     const finalCategoryRaw = shouldInferGymarkCategory
       ? String(result.category_id || "").trim()
@@ -723,6 +869,7 @@ app.post("/api/posts/schedule", (req, res) => {
     body.auto_time ?? String(body.schedule_mode || "auto") !== "manual";
   const manualDt = body.scheduled_at || body.post_date || null;
   const created = [];
+  const reservation = new Set();
 
   for (const platform of platforms) {
     let scheduledAt = null;
@@ -734,6 +881,7 @@ app.post("/api/posts/schedule", (req, res) => {
           contentType,
           brand,
           reserve: true,
+          reservation,
         });
       } catch (error) {
         return res.status(400).json({ error: String(error.message || error) });
@@ -791,6 +939,7 @@ app.delete("/api/posts/clear", (req, res) => {
   const deleted = db
     .prepare("DELETE FROM posts WHERE brand = ?")
     .run(brand).changes;
+  scheduler.clearReservedSlots(brand);
   return res.json({ message: `${deleted} posts eliminados`, deleted });
 });
 
@@ -824,15 +973,36 @@ app.post("/api/posts/:id/regenerate", async (req, res) => {
     return res.status(404).json({ error: "Video del post no encontrado" });
 
   try {
-    const result = await aiService.generateMetadata({
-      videoPath: video.source_file_path || video.file_path,
-      brand: post.brand,
-      categoryId:
-        post.content_type ||
-        video.category_id ||
-        defaultContentTypeForBrand(post.brand),
-      extraContext: String(req.body?.feedback || "").trim(),
-    });
+    const mediaKind = video.media_kind || "video";
+    let result;
+    if (mediaKind === "image") {
+      let imagePaths = [];
+      try {
+        const parsed = JSON.parse(video.image_paths || "[]");
+        if (Array.isArray(parsed)) imagePaths = parsed.filter(Boolean);
+      } catch {}
+      if (imagePaths.length === 0 && video.file_path)
+        imagePaths = [video.file_path];
+      result = await aiService.generateImageMetadata({
+        imagePaths,
+        brand: post.brand,
+        categoryId:
+          post.content_type ||
+          video.category_id ||
+          defaultContentTypeForBrand(post.brand),
+        extraContext: String(req.body?.feedback || "").trim(),
+      });
+    } else {
+      result = await aiService.generateMetadata({
+        videoPath: video.source_file_path || video.file_path,
+        brand: post.brand,
+        categoryId:
+          post.content_type ||
+          video.category_id ||
+          defaultContentTypeForBrand(post.brand),
+        extraContext: String(req.body?.feedback || "").trim(),
+      });
+    }
 
     const hashtags = hashtagService.getHashtags(
       post.content_type || defaultContentTypeForBrand(post.brand),

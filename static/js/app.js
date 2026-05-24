@@ -301,8 +301,11 @@ function renderMiniList(elId, posts, type) {
 ════════════════════════════════════════════════════════════ */
 
 const ALLOWED_EXTS = ["mp4", "mov", "avi", "mkv", "webm"];
+const ALLOWED_IMAGE_EXTS = ["jpg", "jpeg", "png", "webp", "heic", "gif"];
 const MAX_SIZE_MB = 500;
-let uploadQueue = []; // [{id, file, status:'wait'|'uploading'|'done'|'error', pct:0}]
+const MAX_IMAGE_MB = 50;
+const MAX_IMAGES_PER_CAROUSEL = 20;
+let uploadQueue = []; // [{id, kind:'video'|'image', file?, files?, brand, status, pct}]
 let isUploading = false;
 
 /* ── Upload Brand Selector ─────────────────────────────── */
@@ -420,32 +423,53 @@ function initUpload() {
 }
 
 function addFilesToQueue(files) {
-  let added = 0;
+  // Separar vídeos (uno por uno) e imágenes (agrupadas en un carrusel)
+  const videos = [];
+  const images = [];
   for (const file of files) {
     const ext = file.name.split(".").pop().toLowerCase();
-    if (!ALLOWED_EXTS.includes(ext)) {
+    if (ALLOWED_EXTS.includes(ext)) {
+      if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+        toast(
+          `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M18 6L6 18M6 6l12 12"/></svg> ${file.name}: supera los ${MAX_SIZE_MB} MB`,
+          "error",
+        );
+        continue;
+      }
+      videos.push(file);
+    } else if (ALLOWED_IMAGE_EXTS.includes(ext)) {
+      if (file.size > MAX_IMAGE_MB * 1024 * 1024) {
+        toast(
+          `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M18 6L6 18M6 6l12 12"/></svg> ${file.name}: imagen supera los ${MAX_IMAGE_MB} MB`,
+          "error",
+        );
+        continue;
+      }
+      images.push(file);
+    } else {
       toast(
         `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M18 6L6 18M6 6l12 12"/></svg> ${file.name}: formato no permitido`,
         "error",
       );
-      continue;
     }
-    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-      toast(
-        `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M18 6L6 18M6 6l12 12"/></svg> ${file.name}: supera los ${MAX_SIZE_MB} MB`,
-        "error",
-      );
-      continue;
-    }
-    // evitar duplicados por nombre+tamaño
+  }
+
+  let added = 0;
+
+  for (const file of videos) {
     if (
       uploadQueue.find(
-        (q) => q.file.name === file.name && q.file.size === file.size,
+        (q) =>
+          q.kind === "video" &&
+          q.file &&
+          q.file.name === file.name &&
+          q.file.size === file.size,
       )
     )
       continue;
     uploadQueue.push({
       id: Date.now() + Math.floor(Math.random() * 1000000),
+      kind: "video",
       file,
       brand: uploadBrand,
       status: "wait",
@@ -453,6 +477,27 @@ function addFilesToQueue(files) {
     });
     added++;
   }
+
+  if (images.length > 0) {
+    if (images.length > MAX_IMAGES_PER_CAROUSEL) {
+      toast(
+        `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M18 6L6 18M6 6l12 12"/></svg> Máximo ${MAX_IMAGES_PER_CAROUSEL} imágenes por carrusel (recibidas ${images.length})`,
+        "error",
+      );
+    } else {
+      // Cada lote de imágenes seleccionadas a la vez = 1 carrusel
+      uploadQueue.push({
+        id: Date.now() + Math.floor(Math.random() * 1000000),
+        kind: "image",
+        files: images,
+        brand: uploadBrand,
+        status: "wait",
+        pct: 0,
+      });
+      added++;
+    }
+  }
+
   if (added > 0) renderQueue();
 }
 
@@ -472,7 +517,7 @@ function renderQueue() {
   queueEl.classList.remove("hidden");
 
   const waiting = uploadQueue.filter((q) => q.status === "wait").length;
-  titleEl.textContent = `${uploadQueue.length} video${uploadQueue.length > 1 ? "s" : ""} · ${waiting} pendiente${waiting !== 1 ? "s" : ""}`;
+  titleEl.textContent = `${uploadQueue.length} elemento${uploadQueue.length > 1 ? "s" : ""} · ${waiting} pendiente${waiting !== 1 ? "s" : ""}`;
 
   listEl.innerHTML = uploadQueue
     .map((item) => {
@@ -486,12 +531,27 @@ function renderQueue() {
         error: { cls: "error", label: "⚠️ Error" },
       };
       const st = statusMap[item.status] || statusMap.wait;
+      const isImage = item.kind === "image";
+      const totalSize = isImage
+        ? item.files.reduce((acc, f) => acc + (f.size || 0), 0)
+        : item.file?.size || 0;
+      const displayName = isImage
+        ? item.files.length > 1
+          ? `Carrusel · ${item.files.length} imágenes`
+          : item.files[0].name
+        : item.file.name;
+      const icon = isImage
+        ? `<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>`
+        : `<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect width="20" height="15" x="2" y="7" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg>`;
+      const kindBadge = isImage
+        ? `<span class="vbrand-badge" style="background:#0ea5e9">${item.files.length > 1 ? "Carrusel" : "Imagen"}</span>`
+        : `<span class="vbrand-badge" style="background:#6366f1">Video</span>`;
       return `
       <div class="queue-item ${item.status === "done" ? "done" : item.status === "error" ? "error" : item.status === "uploading" ? "active" : ""}" id="qi-${item.id}">
-        <div class="qi-thumb"><svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect width="20" height="15" x="2" y="7" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg></div>
+        <div class="qi-thumb">${icon}</div>
         <div class="qi-info">
-          <div class="qi-name">${item.file.name}</div>
-          <div class="qi-meta">${formatBytes(item.file.size)} &nbsp;<span class="vbrand-badge" style="background:${getBrandMeta(item.brand).color}">${getBrandMeta(item.brand).label}</span></div>
+          <div class="qi-name">${displayName}</div>
+          <div class="qi-meta">${formatBytes(totalSize)} &nbsp;${kindBadge}&nbsp;<span class="vbrand-badge" style="background:${getBrandMeta(item.brand).color}">${getBrandMeta(item.brand).label}</span></div>
           <div class="qi-progress">
             <div class="qi-progress-fill" style="width:${item.pct}%"></div>
           </div>
@@ -516,7 +576,7 @@ function renderQueue() {
   btnAll.disabled = isUploading || !anyWaiting;
   btnAll.textContent = isUploading
     ? "Subiendo..."
-    : `⬆ Subir ${waiting > 0 ? waiting : ""} Video${waiting !== 1 ? "s" : ""}`;
+    : `⬆ Subir ${waiting > 0 ? waiting : ""} elemento${waiting !== 1 ? "s" : ""}`;
 }
 
 async function uploadAllFiles() {
@@ -538,44 +598,44 @@ async function uploadAllFiles() {
 
     try {
       const catId = document.getElementById("uploadCategorySelect").value;
-      const result = await uploadOneFile(
-        item.file,
-        item.brand,
-        catId,
-        (pct) => {
-          if (pct === 100) {
-            const stEl = document.querySelector(`#qi-${item.id} .qi-status`);
-            if (stEl) stEl.textContent = "Generando IA...";
-          }
-          item.pct = pct;
-          // Update individual bar
-          const fill = document.querySelector(
-            `#qi-${item.id} .qi-progress-fill`,
-          );
-          if (fill) fill.style.width = pct + "%";
+      const itemLabel =
+        item.kind === "image"
+          ? item.files.length > 1
+            ? `Carrusel (${item.files.length} imágenes)`
+            : item.files[0].name
+          : item.file.name;
+      const isImage = item.kind === "image";
+      const result = await uploadOneFile(item, catId, (pct) => {
+        if (pct === 100) {
           const stEl = document.querySelector(`#qi-${item.id} .qi-status`);
-          if (stEl) stEl.textContent = `${pct}%`;
-          // Global bar
-          const globalPct = Math.round(
-            ((done + pct / 100) / pending.length) * 100,
-          );
-          progressFill.style.width = globalPct + "%";
-          progressLabel.textContent = `Subiendo "${item.file.name}" · ${pct}%`;
-        },
-      );
+          if (stEl) stEl.textContent = "Generando IA...";
+        }
+        item.pct = pct;
+        // Update individual bar
+        const fill = document.querySelector(`#qi-${item.id} .qi-progress-fill`);
+        if (fill) fill.style.width = pct + "%";
+        const stEl = document.querySelector(`#qi-${item.id} .qi-status`);
+        if (stEl) stEl.textContent = `${pct}%`;
+        // Global bar
+        const globalPct = Math.round(
+          ((done + pct / 100) / pending.length) * 100,
+        );
+        progressFill.style.width = globalPct + "%";
+        progressLabel.textContent = `Subiendo "${itemLabel}" · ${pct}%`;
+      });
       let aiResult = null;
 
       try {
         const aiStEl = document.querySelector(`#qi-${item.id} .qi-status`);
-        if (result?.metadata_stripped) {
+        const prefix = isImage ? "Imagen lista" : "Metadatos eliminados ✅";
+        if (!isImage && result?.metadata_stripped) {
           if (aiStEl) aiStEl.textContent = "Metadatos eliminados ✅";
-          progressLabel.textContent = `Metadatos eliminados en "${item.file.name}" ✅`;
+          progressLabel.textContent = `Metadatos eliminados en "${itemLabel}" ✅`;
           await sleep(500);
         }
         if (aiStEl)
-          aiStEl.textContent =
-            "Metadatos eliminados ✅ · Procesando con Gemini 2.5 Pro...";
-        progressLabel.textContent = `Metadatos eliminados ✅ · Procesando "${item.file.name}" con Gemini 2.5 Pro...`;
+          aiStEl.textContent = `${prefix} · Procesando con Gemini 2.5 Pro...`;
+        progressLabel.textContent = `${prefix} · Procesando "${itemLabel}" con Gemini 2.5 Pro...`;
         aiResult = await generateAIWithRetry(
           {
             video_id: result.id,
@@ -585,20 +645,19 @@ async function uploadAllFiles() {
           ({ attempt, waitSeconds, model, phase, queued }) => {
             if (aiStEl) {
               if (queued && waitSeconds > 0) {
-                aiStEl.textContent = `Metadatos eliminados ✅ · IA en cola (${attempt}) · esperando ${waitSeconds}s`;
+                aiStEl.textContent = `${prefix} · IA en cola (${attempt}) · esperando ${waitSeconds}s`;
               } else if (model) {
-                aiStEl.textContent = `Metadatos eliminados ✅ · Procesando con ${model}...`;
+                aiStEl.textContent = `${prefix} · Procesando con ${model}...`;
               } else if (phase === "queued") {
-                aiStEl.textContent =
-                  "Metadatos eliminados ✅ · Preparando IA...";
+                aiStEl.textContent = `${prefix} · Preparando IA...`;
               }
             }
             if (queued && waitSeconds > 0) {
-              progressLabel.textContent = `Metadatos eliminados ✅ · Esperando IA para "${item.file.name}" · ${waitSeconds}s`;
+              progressLabel.textContent = `${prefix} · Esperando IA para "${itemLabel}" · ${waitSeconds}s`;
             } else if (model) {
-              progressLabel.textContent = `Metadatos eliminados ✅ · Procesando "${item.file.name}" con ${model}...`;
+              progressLabel.textContent = `${prefix} · Procesando "${itemLabel}" con ${model}...`;
             } else {
-              progressLabel.textContent = `Metadatos eliminados ✅ · Preparando IA para "${item.file.name}"...`;
+              progressLabel.textContent = `${prefix} · Preparando IA para "${itemLabel}"...`;
             }
           },
         );
@@ -616,14 +675,14 @@ async function uploadAllFiles() {
             }
           }
         } catch (cleanupErr) {
-          console.error("No se pudo limpiar video sin IA:", cleanupErr);
+          console.error("No se pudo limpiar contenido sin IA:", cleanupErr);
         }
         throw {
           error:
             (e && e.error
               ? `IA no disponible: ${e.error}`
               : "IA no disponible") +
-            ". El video fue removido para no dejar contenido sin IA.",
+            ". El contenido fue removido para no dejar publicaciones sin IA.",
         };
       }
 
@@ -638,8 +697,14 @@ async function uploadAllFiles() {
       );
     } catch (err) {
       item.status = "error";
+      const errLabel =
+        item.kind === "image"
+          ? item.files.length > 1
+            ? `Carrusel (${item.files.length} imágenes)`
+            : item.files[0].name
+          : item.file.name;
       toast(
-        `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M18 6L6 18M6 6l12 12"/></svg> Error subiendo "${item.file.name}": ${err.error || "error desconocido"}`,
+        `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M18 6L6 18M6 6l12 12"/></svg> Error subiendo "${errLabel}": ${err.error || "error desconocido"}`,
         "error",
       );
     }
@@ -647,7 +712,7 @@ async function uploadAllFiles() {
   }
 
   progressFill.style.width = "100%";
-  progressLabel.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M20 6L9 17l-5-5"/></svg> ${done} de ${pending.length} video${pending.length > 1 ? "s" : ""} subidos`;
+  progressLabel.innerHTML = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M20 6L9 17l-5-5"/></svg> ${done} de ${pending.length} elemento${pending.length > 1 ? "s" : ""} subido${pending.length > 1 ? "s" : ""}`;
   isUploading = false;
   renderQueue();
   await refreshAllData();
@@ -666,11 +731,15 @@ async function uploadAllFiles() {
   }, 3000);
 }
 
-function uploadOneFile(file, brand, category_id, onProgress) {
+function uploadOneFile(item, category_id, onProgress) {
   return new Promise((resolve, reject) => {
     const formData = new FormData();
-    formData.append("video", file);
-    formData.append("brand", brand);
+    if (item.kind === "image") {
+      for (const f of item.files) formData.append("images", f);
+    } else {
+      formData.append("video", item.file);
+    }
+    formData.append("brand", item.brand);
     formData.append("category_id", category_id);
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/videos/upload");
@@ -810,19 +879,29 @@ async function loadVideoGallery() {
               `<option value="${b.key}" ${b.key === v.brand ? "selected" : ""}>${b.label}</option>`,
           )
           .join("");
+        const isImage = v.media_kind === "image";
+        const mediaBadge = isImage
+          ? `<span class="vbrand-badge" style="background:#0ea5e9">${(v.image_count || 1) > 1 ? `Carrusel · ${v.image_count} 📸` : "Imagen 📸"}</span>`
+          : `<span class="vbrand-badge" style="background:#6366f1">Video 🎬</span>`;
+        const sizeAndDur = isImage
+          ? `${v.file_size_mb} MB · ${v.image_count || 1} imagen${(v.image_count || 1) > 1 ? "es" : ""}`
+          : `${v.file_size_mb} MB · ${v.duration ? v.duration + "s" : "\u2013"}`;
         return `
       <div class="video-card" data-id="${v.id}">
         <div class="video-card__thumb">
           ${
             v.thumbnail
-              ? `<img src="${v.thumbnail}" alt="" onerror="this.parentElement.textContent='\uD83C\uDFAC'">`
-              : `\uD83C\uDFAC`
+              ? `<img src="${v.thumbnail}" alt="" onerror="this.parentElement.textContent='${isImage ? "📸" : "🎬"}'">`
+              : isImage
+                ? "📸"
+                : "🎬"
           }
         </div>
         <div class="video-card__info">
           <div class="video-card__name">${getVideoDisplayName(v)}</div>
-          <div class="video-card__meta">${v.file_size_mb} MB \u00b7 ${v.duration ? v.duration + "s" : "\u2013"}</div>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+          <div class="video-card__meta">${sizeAndDur}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
+            ${mediaBadge}
             <span class="vbrand-badge" style="background:${bm.color}">${bm.label}</span>
             <span class="video-card__meta">${v.uploaded_at}</span>
           </div>
@@ -1512,7 +1591,15 @@ async function loadPostsTable() {
   const tbody = document.getElementById("postsTableBody");
   try {
     const params = currentFilter !== "all" ? `?status=${currentFilter}` : "";
-    const posts = await get(`/api/posts${params}`);
+    const [posts, freshVideos] = await Promise.all([
+      get(`/api/posts${params}`),
+      get("/api/videos").catch(() => null),
+    ]);
+
+    if (Array.isArray(freshVideos)) {
+      videos = freshVideos;
+      allVideosCache = freshVideos;
+    }
 
     if (!posts.length) {
       tbody.innerHTML = `<tr><td colspan="7" class="empty-msg">No hay posts con este filtro</td></tr>`;
@@ -1530,10 +1617,21 @@ async function loadPostsTable() {
         const videoRef = videos.find((v) => v.id === p.video_id);
         const vidName = videoRef
           ? getVideoDisplayName(videoRef)
-          : `Video #${p.video_id}`;
+          : `Media #${p.video_id}`;
+        let mediaIcon = "🎬";
+        let mediaTitle = "Video";
+        if (videoRef?.media_kind === "image") {
+          if ((videoRef.image_count || 1) > 1) {
+            mediaIcon = "🖼️";
+            mediaTitle = `Carrusel · ${videoRef.image_count} imágenes`;
+          } else {
+            mediaIcon = "📸";
+            mediaTitle = "Imagen";
+          }
+        }
         return `
         <tr>
-          <td data-label="Video">${truncate(vidName, 22)}</td>
+          <td data-label="Video"><span title="${mediaTitle}" style="margin-right:4px">${mediaIcon}</span>${truncate(vidName, 22)}</td>
           <td data-label="Plataforma"><div class="plat-icon"><span class="plat-dot ${p.platform}"></span>${platformLabel(p.platform)}</div></td>
           <td data-label="Título">${truncate(p.title, 28)}</td>
           <td data-label="Tipo">${contentTypeLabel(p.content_type)}</td>
@@ -2173,7 +2271,14 @@ function openCalendarPostModal(post) {
   const video =
     allVideosCache.find((v) => v.id === post.video_id) ||
     videos.find((v) => v.id === post.video_id);
-  const videoSrc = video?.video_url || video?.source_video_url || "";
+  const isImageMedia = video?.media_kind === "image";
+  const imageUrls = Array.isArray(video?.image_urls)
+    ? video.image_urls.filter(Boolean)
+    : [];
+  const isCarousel = isImageMedia && imageUrls.length > 1;
+  const videoSrc = !isImageMedia
+    ? video?.video_url || video?.source_video_url || ""
+    : "";
   const downloadUrl = `/api/posts/${post.id}/download-video`;
   const hashtags = Array.isArray(post.hashtags) ? post.hashtags : [];
   const desc = post.description?.trim() || "Sin descripción";
@@ -2193,10 +2298,14 @@ function openCalendarPostModal(post) {
         <span class="calendar-chip">${post.brand ? post.brand.toUpperCase() : ""}</span>
       </div>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-        <a class="btn btn-ghost btn-sm" href="${downloadUrl}">
+        ${
+          isImageMedia
+            ? ""
+            : `<a class="btn btn-ghost btn-sm" href="${downloadUrl}">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="icon-inline"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
           Descargar video HQ
-        </a>
+        </a>`
+        }
         <button
           class="btn btn-primary btn-sm"
           type="button"
@@ -2209,9 +2318,37 @@ function openCalendarPostModal(post) {
     <div class="calendar-post-body">
       <div class="calendar-post-video-wrap">
         ${
-          videoSrc
-            ? `<video src="${videoSrc}" controls preload="metadata"></video>`
-            : `<div class="calendar-post-fallback">No se encontró el video asociado.</div>`
+          isImageMedia
+            ? imageUrls.length
+              ? `<div class="cpm-carousel" data-post-id="${post.id}" data-index="0" data-count="${imageUrls.length}">
+                  <div class="cpm-carousel-track">
+                    ${imageUrls
+                      .map(
+                        (url, i) =>
+                          `<img src="${url}" alt="" class="cpm-carousel-img${i === 0 ? " active" : ""}" data-idx="${i}">`,
+                      )
+                      .join("")}
+                  </div>
+                  ${
+                    isCarousel
+                      ? `<button type="button" class="cpm-carousel-btn cpm-carousel-prev" aria-label="Anterior">‹</button>
+                         <button type="button" class="cpm-carousel-btn cpm-carousel-next" aria-label="Siguiente">›</button>
+                         <div class="cpm-carousel-counter"><span class="cpm-carousel-current">1</span>/${imageUrls.length}</div>
+                         <div class="cpm-carousel-dots">
+                           ${imageUrls
+                             .map(
+                               (_, i) =>
+                                 `<span class="cpm-carousel-dot${i === 0 ? " active" : ""}" data-idx="${i}"></span>`,
+                             )
+                             .join("")}
+                         </div>`
+                      : ""
+                  }
+                </div>`
+              : `<div class="calendar-post-fallback">No se encontraron las imágenes asociadas.</div>`
+            : videoSrc
+              ? `<video src="${videoSrc}" controls preload="metadata"></video>`
+              : `<div class="calendar-post-fallback">No se encontró el video asociado.</div>`
         }
       </div>
       <div class="calendar-post-content">
@@ -2262,6 +2399,36 @@ function openCalendarPostModal(post) {
     </div>
   `;
 
+  if (isCarousel) {
+    const carouselEl = content.querySelector(".cpm-carousel");
+    if (carouselEl) {
+      const imgs = carouselEl.querySelectorAll(".cpm-carousel-img");
+      const dots = carouselEl.querySelectorAll(".cpm-carousel-dot");
+      const counter = carouselEl.querySelector(".cpm-carousel-current");
+      const total = imgs.length;
+      const setIndex = (idx) => {
+        const next = ((idx % total) + total) % total;
+        carouselEl.dataset.index = String(next);
+        imgs.forEach((el, i) => el.classList.toggle("active", i === next));
+        dots.forEach((el, i) => el.classList.toggle("active", i === next));
+        if (counter) counter.textContent = String(next + 1);
+      };
+      carouselEl
+        .querySelector(".cpm-carousel-prev")
+        ?.addEventListener("click", () =>
+          setIndex(Number(carouselEl.dataset.index || 0) - 1),
+        );
+      carouselEl
+        .querySelector(".cpm-carousel-next")
+        ?.addEventListener("click", () =>
+          setIndex(Number(carouselEl.dataset.index || 0) + 1),
+        );
+      dots.forEach((dot) => {
+        dot.addEventListener("click", () => setIndex(Number(dot.dataset.idx)));
+      });
+    }
+  }
+
   overlay.classList.remove("hidden");
 }
 
@@ -2276,19 +2443,24 @@ function normalizeHashtags(list) {
 function buildPlatformCaption(post) {
   const base = String(post?.description || "").trim();
   const tags = normalizeHashtags(post?.hashtags || []);
-  const hashtagsLine = tags.join("").trim();
   const platform = String(post?.platform || "").toLowerCase();
 
-  if (!hashtagsLine) return base;
+  if (!tags.length) return base;
 
-  if (platform === "instagram") {
-    return `${base}\n.\n.\n.\n${hashtagsLine}`.trim();
-  }
-
-  if (platform === "facebook") {
+  // TikTok: todos los hashtags pegados sin espacios en una sola línea
+  if (platform === "tiktok") {
+    const hashtagsLine = tags.join("");
     return `${base}\n\n${hashtagsLine}`.trim();
   }
 
+  // Instagram: separados con espacio, tras 3 puntos para esconderlos
+  if (platform === "instagram") {
+    const hashtagsLine = tags.join(" ");
+    return `${base}\n.\n.\n.\n${hashtagsLine}`.trim();
+  }
+
+  // Facebook y resto: separados con espacio
+  const hashtagsLine = tags.join(" ");
   return `${base}\n\n${hashtagsLine}`.trim();
 }
 

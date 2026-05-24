@@ -55,9 +55,10 @@ function slotKey(brand, platform, dateObj) {
   return `${brand}:${platform}:${brandMinuteKey(brand, dateObj)}`;
 }
 
-function slotTaken({ brand, platform, scheduledAt }) {
+function slotTaken({ brand, platform, scheduledAt, reservation }) {
   const targetKey = slotKey(brand, platform, scheduledAt);
-  if (RESERVED_SLOTS.has(targetKey)) return true;
+  const reserved = reservation || RESERVED_SLOTS;
+  if (reserved.has(targetKey)) return true;
 
   const rows = db
     .prepare(
@@ -75,8 +76,9 @@ function slotTaken({ brand, platform, scheduledAt }) {
   );
 }
 
-function reserveSlot(brand, platform, dateObj) {
-  RESERVED_SLOTS.add(slotKey(brand, platform, dateObj));
+function reserveSlot(brand, platform, dateObj, reservation) {
+  const reserved = reservation || RESERVED_SLOTS;
+  reserved.add(slotKey(brand, platform, dateObj));
 }
 
 export class SchedulerService {
@@ -104,6 +106,7 @@ export class SchedulerService {
     extraPlatformDayCounts = {},
     searchDays = 120,
     reserve = false,
+    reservation = null,
   }) {
     const baseType = SCHEDULE_SLOTS[contentType]
       ? contentType
@@ -135,8 +138,10 @@ export class SchedulerService {
           extraPlatformDay: extraPlatformDayCounts[platKey] || 0,
         });
         if (!limit.allowed) continue;
-        if (slotTaken({ brand, platform, scheduledAt: local })) continue;
-        if (reserve) reserveSlot(brand, platform, local);
+        if (slotTaken({ brand, platform, scheduledAt: local, reservation })) {
+          continue;
+        }
+        if (reserve) reserveSlot(brand, platform, local, reservation);
         return local;
       }
     }
@@ -256,5 +261,15 @@ export class SchedulerService {
 
     const updated = db.prepare("SELECT * FROM posts WHERE id = ?").get(postId);
     return rowToPost(updated);
+  }
+
+  clearReservedSlots(brand = null) {
+    if (!brand) {
+      RESERVED_SLOTS.clear();
+      return;
+    }
+    for (const key of RESERVED_SLOTS) {
+      if (key.startsWith(`${brand}:`)) RESERVED_SLOTS.delete(key);
+    }
   }
 }

@@ -139,6 +139,16 @@ function inferMimeType(videoPath) {
   return "video/mp4";
 }
 
+function inferImageMimeType(imagePath) {
+  const ext = path.extname(imagePath).toLowerCase();
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".png") return "image/png";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".gif") return "image/gif";
+  if (ext === ".heic") return "image/heic";
+  return "image/jpeg";
+}
+
 function cleanJsonText(text) {
   return String(text || "{}")
     .trim()
@@ -254,6 +264,62 @@ function sanitizeText(value, maxLen) {
     .trim();
   if (txt.length <= maxLen) return txt;
   return txt.slice(0, maxLen).trim();
+}
+
+function buildImagePrompt({
+  context,
+  categoryId,
+  enforceGymarkCategory,
+  imageCount,
+}) {
+  const categoryField = enforceGymarkCategory
+    ? ',\n  "category_id": "una de las 6 categorías de gymark"'
+    : ',\n  "category_id": "' + String(categoryId || "") + '"';
+
+  const categoryRules = enforceGymarkCategory
+    ? `
+12. Debes clasificar el contenido en EXACTAMENTE una categoría de Gymark usando SOLO estas opciones:
+    - acc_gimnasio
+    - pilates_yoga
+    - sup_naturales
+    - ropa_deportiva
+    - sup_deportivos
+    - home_gym
+13. Si dudas entre dos, elige la más específica según el producto/acción dominante del conjunto.
+`
+    : "";
+
+  const carouselNote =
+    imageCount > 1
+      ? `Vas a recibir ${imageCount} imágenes que conforman un MISMO post tipo carrusel (TikTok Photo Mode / Instagram Carousel). Analiza TODAS las imágenes en conjunto y genera UN solo título, UNA descripción y UN set de hashtags coherente para el carrusel completo.`
+      : `Vas a recibir 1 imagen que será publicada como post de foto única (TikTok Photo Mode / Instagram). Analízala a detalle.`;
+
+  return `
+${carouselNote}
+Debes generar metadatos altamente optimizados para TikTok/Reels/Instagram basados ÚNICAMENTE en lo que se ve en las imágenes (no hay audio).
+Reglas estrictas:
+1. Nada de títulos genéricos. El título debe tratar EXACTAMENTE del tema central/concepto que muestran las imágenes en conjunto.
+2. La descripción debe ser CORTA. Nadie lee descripciones largas. Máximo 2 oraciones.
+3. Mantén un lenguaje coloquial cercano a la audiencia objetivo del creador.
+4. PUNTUACIÓN ESPAÑOLA OBLIGATORIA: si es exclamativa usa ¡!, si es pregunta usa ¿?.
+5. El título y descripción deben reflejar el producto, escena, transformación o mensaje principal visible.
+6. Si las imágenes muestran un antes/después, un set de variantes, un paso a paso o un listado, recoge esa narrativa en el título.
+7. Incluye 3 campos extra en el JSON: visual_clave, frase_audio_literal (siempre "sin_voz_clara" porque no hay audio) y audio_clave (déjalo vacío o "sin_audio").
+8. PROHIBIDO mencionar "IA", "AI", "inteligencia artificial", "chatgpt", "gemini" en título/descripcion.
+9. PROHIBIDO inventar texto que no aparezca; usa solo lo que se ve.
+10. Si hay texto visible en las imágenes (OCR), úsalo como pista secundaria.
+11. Devuelve EXCLUSIVAMENTE JSON válido con esta estructura exacta:
+{
+  "titulo": "Título Gancho Corto Aquí",
+  "descripcion": "Descripción ultracorta (1 o 2 líneas). Incluye 1 o 2 emojis.",
+  "audio_clave": "sin_audio",
+  "frase_audio_literal": "sin_voz_clara",
+  "visual_clave": "acción/elemento visual dominante del conjunto"${categoryField}
+}
+${categoryRules}
+Contexto del creador:
+${context}
+`;
 }
 
 export class AIService {
@@ -391,5 +457,153 @@ export class AIService {
     }
 
     throw new Error(lastError?.message || "No se pudo generar metadata con IA");
+  }
+
+  async generateImageMetadata({
+    imagePaths,
+    brand,
+    categoryId,
+    extraContext = "",
+    progressCallback,
+  }) {
+    const paths = Array.isArray(imagePaths)
+      ? imagePaths.filter(Boolean)
+      : imagePaths
+        ? [imagePaths]
+        : [];
+    if (paths.length === 0) {
+      throw new Error("No se recibieron imágenes para analizar");
+    }
+
+    const effectiveCategory = categoryId || defaultContentTypeForBrand(brand);
+    const fileHint = fromFilename(paths[0]);
+
+    if (this.keys.length === 0) {
+      return {
+        titulo:
+          `${FALLBACK_TITLES[effectiveCategory] || "Nueva publicación"}: ${fileHint}`.slice(
+            0,
+            90,
+          ),
+        descripcion: `Contenido sobre ${effectiveCategory.replace(/_/g, " ")} listo para publicar. 📸`,
+        audio_clave: "sin_audio",
+        frase_audio_literal: "sin_voz_clara",
+        visual_clave: fileHint,
+        category_id: effectiveCategory,
+        model_used: "Fallback",
+      };
+    }
+
+    let lastError;
+    const enforceGymarkCategory =
+      brand === "gymark" && !String(categoryId || "").trim();
+
+    for (const modelName of MODEL_PRIORITY) {
+      for (const key of this.keys) {
+        const ai = new GoogleGenAI({ apiKey: key });
+        const uploadedFiles = [];
+        try {
+          if (progressCallback)
+            progressCallback(friendlyModelName(modelName), "uploading");
+
+          for (const imagePath of paths) {
+            let uploaded = await ai.files.upload({
+              file: imagePath,
+              config: { mimeType: inferImageMimeType(imagePath) },
+            });
+            let state = uploaded?.state;
+            while (state === FileState.PROCESSING) {
+              await sleep(1500);
+              uploaded = await ai.files.get({ name: uploaded.name });
+              state = uploaded?.state;
+            }
+            if (state === FileState.FAILED) {
+              throw new Error(
+                "Una imagen falló durante procesamiento en Gemini",
+              );
+            }
+            uploadedFiles.push(uploaded);
+          }
+
+          const context = [
+            buildBrandContext(brand),
+            `Categoría sugerida: ${effectiveCategory}.`,
+            extraContext ? String(extraContext).trim() : "",
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          const prompt = buildImagePrompt({
+            context,
+            categoryId: effectiveCategory,
+            enforceGymarkCategory,
+            imageCount: uploadedFiles.length,
+          });
+
+          if (progressCallback)
+            progressCallback(friendlyModelName(modelName), "generating");
+
+          const parts = [];
+          uploadedFiles.forEach((file, idx) => {
+            if (uploadedFiles.length > 1) {
+              parts.push({
+                text: `Imagen ${idx + 1} de ${uploadedFiles.length}:`,
+              });
+            }
+            parts.push({
+              fileData: {
+                fileUri: file?.uri,
+                mimeType: file?.mimeType || inferImageMimeType(paths[idx]),
+              },
+            });
+          });
+          parts.push({ text: prompt });
+
+          const result = await ai.models.generateContent({
+            model: modelName,
+            contents: [{ role: "user", parts }],
+            config: { responseMimeType: "application/json", temperature: 0.85 },
+          });
+
+          const parsed = JSON.parse(cleanJsonText(result.text));
+
+          const resolvedCategory = enforceGymarkCategory
+            ? inferGymarkCategoryFromSignals(parsed, effectiveCategory)
+            : sanitizeText(parsed.category_id || effectiveCategory, 60) ||
+              effectiveCategory;
+
+          return {
+            titulo: sanitizeText(
+              parsed.titulo || FALLBACK_TITLES[effectiveCategory] || fileHint,
+              90,
+            ),
+            descripcion: sanitizeText(
+              parsed.descripcion ||
+                `Contenido sobre ${effectiveCategory.replace(/_/g, " ")}.`,
+              280,
+            ),
+            audio_clave: sanitizeText(parsed.audio_clave || "sin_audio", 280),
+            frase_audio_literal: "sin_voz_clara",
+            visual_clave: sanitizeText(parsed.visual_clave || "", 280),
+            category_id: resolvedCategory,
+            model_used: friendlyModelName(modelName),
+          };
+        } catch (error) {
+          lastError = error;
+        } finally {
+          for (const f of uploadedFiles) {
+            if (f?.name) {
+              try {
+                await ai.files.delete({ name: f.name });
+              } catch {}
+            }
+          }
+        }
+      }
+    }
+
+    throw new Error(
+      lastError?.message || "No se pudo generar metadata con IA (imágenes)",
+    );
   }
 }
